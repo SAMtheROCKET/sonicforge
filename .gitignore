@@ -14,3 +14,9 @@ node_modules/
 .vercel
 __pycache__/
 *.pyc
+
+# Working notes, kept locally and deliberately not published.
+# TODO.md   tracks progress and is meaningless to anyone else.
+# LAUNCH.md is the launch strategy: positioning, draft copy, channel plan.
+TODO.md
+LAUNCH.md

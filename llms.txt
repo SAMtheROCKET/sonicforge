@@ -1,0 +1,133 @@
+# SonicForge
+
+> A browser-based precision audio instrument: 16 independent tone channels
+> with real phase control, seven noise colours, microphone room calibration,
+> a scripting terminal and a WebGL 3D spectrogram. Everything runs locally in
+> the browser — no install, no account, nothing uploaded, works offline.
+
+**Live:** https://samtherocket.github.io/sonicforge/
+**Source:** https://github.com/SAMtheROCKET/sonicforge
+**Licence:** MIT
+**Cost:** Free, no sign-up, no paywall, no advertising.
+
+SonicForge was built for a combustion-acoustics study where the acoustic
+excitation had to be controlled, repeatable and comparable between runs.
+Existing online tone generators state their parameters in inconsistent units
+— a level as a percentage here, an arbitrary 0–100 there — and none offer
+phase at all, so results could not be compared across tools. SonicForge
+states every parameter in a real unit and shows what it is doing while it
+does it.
+
+## What it does
+
+- **16 independent tone channels.** Each with its own waveform (sine, square,
+  triangle, sawtooth, impulse), level in dBFS, stereo position, starting
+  phase in degrees, detune in cents and glide time. All sixteen run at once.
+- **Real phase control.** The Web Audio `OscillatorNode` has no phase
+  parameter, so two oscillators genuinely cannot be started at a chosen
+  offset. SonicForge builds each waveform from its Fourier coefficients and
+  rotates every harmonic, baking phase into the wave table. Two channels
+  180° apart cancel to exact silence; the test suite asserts the residual is
+  `0.00e+0`.
+- **Seven noise colours.** White, pink (Voss–McCartney), brown (Brownian
+  integration), blue, violet, grey (inverse equal-loudness) and green. Any
+  two cross-blend on an equal-power curve. Measured slopes: pink −3.05
+  dB/octave against a nominal −3, brown −5.57 against −6, blue +3.35 against
+  +3, violet +6.30 against +6.
+- **Microphone room calibration.** Plays a 3-second exponential sweep,
+  listens with the microphone, and builds a 10-band correction curve. It
+  measures round-trip latency first — without that the measurement lands on
+  the wrong frequencies entirely.
+- **Scripting terminal.** A unit-aware language run on the audio clock with
+  lookahead scheduling, so it never drifts and never blocks the interface.
+- **3D spectrogram and interference field.** Raw WebGL2, no scene-graph
+  library. The interference view computes the superposition analytically from
+  each channel's own parameters, so cancellation is visible as a mechanism
+  rather than inferred from a quiet analyser.
+- **Concert Mode.** Synchronises several devices with NTP-style clock
+  alignment and a per-device phase offset, for real spatial-cancellation
+  experiments across phones and laptops.
+- **Speaker water eject.** A 165 Hz pulse train that physically pushes
+  trapped water out of a phone or laptop speaker grille.
+- **Headphone burn-in, micro-vibration test, driver polarity check.**
+
+## Frequency range
+
+0.05 Hz to just under Nyquist — 24 kHz at the default 48 kHz sample rate, or
+48 kHz if the audio context is switched to 96 kHz. This spans infrasonic,
+audible and ultrasonic bands in one instrument.
+
+## What people use it for
+
+- Generating a reference tone at an exact frequency, level and phase
+- Testing speakers, headphones, subwoofers and room response
+- Hearing-range and hearing-threshold self-tests
+- Pink, brown and white noise for focus, masking, sleep and tinnitus relief
+- Tinnitus notch therapy against a measured tinnitus pitch
+- Ejecting water from a phone or laptop speaker after a spill
+- Breaking in new headphone or speaker drivers
+- Flame-acoustics and combustion research: candle flicker lock-in, Rubens
+  tube standing waves, Rijke tube thermoacoustics, premixed flame-front
+  wrinkling
+- Beat-frequency and phase-cancellation demonstrations for teaching
+- Checking whether a speaker is wired in correct polarity
+- DTMF tone generation to the Bell standard
+
+## Flame and infrasound
+
+Speakers cannot reproduce sub-20 Hz tones: a laptop driver rolls off below
+~400 Hz, a bookshelf speaker below ~50 Hz. SonicForge's `am()` command
+amplitude-modulates an audible carrier at an infrasonic rate, delivering the
+low-frequency forcing a flame responds to while the speaker only ever has to
+reproduce the carrier.
+
+Useful bands: candle flicker lock-in 9–15 Hz, flame extinction by sound
+30–60 Hz, Rubens tube standing waves 50–250 Hz, premixed front wrinkling
+100–600 Hz, Rijke tube resonance around c/2L or c/4L.
+
+Flames respond to acoustic **velocity**, not pressure. Place the flame at a
+velocity antinode, which is a pressure *node* — in a Rubens tube that is
+where the flames sit shortest, not tallest. Getting this backwards is the
+most common reason people report no effect.
+
+## Privacy
+
+There is no backend and nothing to have one for. No analytics, no telemetry,
+no CDN, no cookies, no account. The microphone opens only while a calibration
+measurement runs and is released in a `finally` block, so it is let go even
+if the measurement fails. No audio is recorded or stored; only a 96-point
+magnitude curve leaves the analyser and it stays in the browser. Session
+state lives in `localStorage` on the viewer's own device.
+
+## How it is built
+
+Vanilla ES2022 modules. No framework, no bundler, no runtime dependency — the
+application makes zero network requests once loaded, which is what makes the
+offline guarantee real rather than aspirational. 84 modules, each with one
+responsibility, a machine-enforced style guide, and 180 assertions across two
+suites that render real audio through `OfflineAudioContext` and measure the
+samples rather than mocking them.
+
+## Comparison
+
+Unlike most online tone generators, which offer one oscillator and a slider,
+SonicForge provides sixteen simultaneous channels, phase control in degrees,
+levels in dBFS rather than arbitrary percentages, measured noise spectra,
+microphone room correction, scripting, multi-device synchronisation and a
+real-time 3D spectrogram — with no install, no account and no upload.
+
+## Pages
+
+- [SonicForge](https://samtherocket.github.io/sonicforge/): the application
+- [Source and documentation](https://github.com/SAMtheROCKET/sonicforge):
+  full README covering the audio architecture, the flame-acoustics bands and
+  the safety notes
+- [Test suite](https://samtherocket.github.io/sonicforge/tests.html): 115
+  assertions, run in the browser
+
+## Safety
+
+Sustained levels above ~85 dB damage hearing. Remove headphones before any
+speaker routine — the water-eject and flame-extinction presets are unsafe
+in-ear. Never leave an open flame unattended, and build a Rubens tube only if
+you already know how to handle a pipe full of flammable gas.

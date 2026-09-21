@@ -23,9 +23,149 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B0F19'/%3E%3Cpath d='M4 16h3c1 0 1.5-8 3-8s2 16 3 16 1.5-8 3-8h2c1 0 1.5-5 3-5s2 10 3 10' stroke='%2300F2FE' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="manifest" href="./manifest.webmanifest">
 
+<!-- Canonical. The app is reachable from more than one origin; this names
+     the one search engines should index and attribute. -->
+<link rel="canonical" href="https://samtherocket.github.io/sonicforge/">
+<link rel="alternate" type="text/plain"
+      href="https://samtherocket.github.io/sonicforge/llms.txt"
+      title="Plain-text summary for language models">
+
+<meta name="author" content="Sambit Supriya Dash">
+<meta name="application-name" content="SonicForge">
+<meta name="apple-mobile-web-app-title" content="SonicForge">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1">
+
+<meta name="twitter:title" content="SonicForge — Forge any frequency">
+<meta name="twitter:description"
+      content="16 tone channels with real phase control, seven noise
+               colours, mic room calibration and a WebGL 3D spectrogram.
+               Free, no install, nothing uploaded.">
+
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="./css/theme.css">
 <link rel="stylesheet" href="./css/components.css">
+
+<!-- Structured data. Describes the application to search engines and to
+     answer engines that read schema.org rather than prose. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "@id": "https://samtherocket.github.io/sonicforge/#app",
+      "name": "SonicForge",
+      "alternateName": "SonicForge Tone Generator",
+      "url": "https://samtherocket.github.io/sonicforge/",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Audio signal generator",
+      "operatingSystem": "Any modern browser (Chrome, Edge, Firefox, Safari)",
+      "browserRequirements": "Requires Web Audio API and JavaScript",
+      "softwareVersion": "1.0",
+      "inLanguage": "en",
+      "isAccessibleForFree": true,
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "license": "https://opensource.org/licenses/MIT",
+      "image": "https://samtherocket.github.io/sonicforge/assets/og.png",
+      "screenshot":
+        "https://samtherocket.github.io/sonicforge/assets/screenshot.png",
+      "description": "A browser-based precision audio instrument: 16 tone channels with real phase control, seven noise colours, microphone room calibration, a scripting terminal and a WebGL 3D spectrogram. Runs entirely client-side with nothing uploaded, and works offline.",
+      "featureList": [
+        "16 independent tone channels, each with waveform, dBFS level, stereo pan, starting phase, detune and glide",
+        "True phase control — two channels 180 degrees apart cancel to exact silence",
+        "Seven noise colours: white, pink, brown, blue, violet, grey and green",
+        "Microphone room calibration with a 10-band correction curve",
+        "Real-time WebGL 3D spectrogram and analytic interference field",
+        "Scriptable terminal running on the audio clock",
+        "Concert Mode: multi-device synchronisation with per-device phase offset",
+        "Speaker water eject, headphone burn-in and driver polarity check",
+        "Frequency range 0.05 Hz to Nyquist, covering infrasonic and ultrasonic",
+        "Works offline, installs as a PWA, uploads nothing"
+      ],
+      "keywords": "tone generator, frequency generator, online tone generator, signal generator, sine wave generator, pink noise, brown noise, white noise generator, spectrogram, spectrum analyser, room calibration, speaker test, water eject, tinnitus notch, infrasound, ultrasonic, phase cancellation, Web Audio",
+      "author": {
+        "@type": "Person",
+        "name": "Sambit Supriya Dash"
+      },
+      "maintainer": {
+        "@type": "Person",
+        "name": "Sambit Supriya Dash"
+      },
+      "codeRepository": "https://github.com/SAMtheROCKET/sonicforge",
+      "programmingLanguage": "JavaScript"
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://github.com/SAMtheROCKET/sonicforge#source",
+      "name": "SonicForge",
+      "codeRepository": "https://github.com/SAMtheROCKET/sonicforge",
+      "programmingLanguage": "JavaScript",
+      "license": "https://opensource.org/licenses/MIT",
+      "runtimePlatform": "Web browser"
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://samtherocket.github.io/sonicforge/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is SonicForge free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. It is free, MIT-licensed, open source, and needs no account or sign-up. There is no paywall and no advertising."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it upload anything or record me?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. There is no backend. No analytics, no telemetry, no CDN and no cookies. The microphone opens only while a room-calibration measurement is running and is released as soon as it ends; no audio is recorded or stored, and only a 96-point magnitude curve leaves the analyser, staying in your browser."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What frequency range can it generate?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "From 0.05 Hz to just below Nyquist — 24 kHz at the default 48 kHz sample rate, or 48 kHz if you switch the audio context to 96 kHz. That covers infrasonic, audible and ultrasonic bands."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why can I not hear frequencies below 20 Hz?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Your speaker cannot reproduce them. A laptop driver rolls off below about 400 Hz and a bookshelf speaker below about 50 Hz, so the signal is being generated correctly but not radiated. Use the am() command to deliver an infrasonic envelope on an audible carrier instead."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does the speaker water eject work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "It plays a 165 Hz pulse train at high excursion, which moves the driver far enough to physically push trapped water out of the grille. Point the speaker downward and take headphones off first — at that level in-ear playback is genuinely unsafe."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it work offline?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. A service worker precaches every shipped file, so once the page has loaded it runs with no connection at all. It can also be installed as a progressive web app."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
