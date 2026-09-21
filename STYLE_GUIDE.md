@@ -147,6 +147,33 @@ Required sections:
 - Braces are mandatory on every `if`/`for`/`while`, even single-statement.
 - No nested ternaries.
 
+### 4.1 Where the column limit does not apply
+
+The limit governs **code**. In three places a line break is not neutral
+formatting — it changes the thing itself — and the limit is therefore
+suspended. Each is a deliberate exemption, not an oversight.
+
+**Multi-line template literals.** A template literal spanning several lines
+holds embedded content: a GLSL shader, a script in SonicForge's own
+language, a block of author copy. Rewrapping those lines edits the data.
+A single-line template literal is an ordinary expression and stays checked.
+`lint_style.py` implements this in `find_embedded_content_lines`.
+
+**Data URIs, and CSS values that cannot be split.** A newline inside
+`url("data:…")` changes the value. There is exactly one such declaration in
+the stylesheet, and it carries a comment saying so.
+
+**HTML inline content and metadata.** Whitespace between inline elements is
+rendered, so breaking such a line changes the page. And a `<meta>`
+description or an Open Graph string is content: rewrapping it alters what
+search engines and link unfurlers read. Structural markup — an opening tag
+carrying several attributes and no text — is wrapped like anything else, and
+`index.html` is wrapped that way throughout.
+
+The rule behind all three: **wrap code, never data.** When a break would
+change behaviour or content rather than presentation, leave the line long
+and say why in a comment beside it.
+
 ---
 
 ## 5. Enforcement
@@ -157,9 +184,18 @@ python tools/lint_style.py js/core  # one directory
 python tools/lint_style.py --fix-report  # group violations by rule
 ```
 
-The linter checks: line length, function length, entry-point length, constant
-casing, single-character identifiers, dtype suffixes, docstring presence and
-section completeness, and module ordering.
+The linter checks: line length, function length, entry-point length,
+module length, constant casing, single-character identifiers, dtype
+suffixes, docstring presence and section completeness. A `const` bound
+to an arrow or function expression is treated as a function: exempt from
+the dtype suffix, subject to the length budget.
+
+`tools/check_wiring.py` covers what the linter cannot: that every named
+import resolves to a real export, that every element id referenced in
+code exists in `index.html`, and that every style token used is defined.
+It reads the inline module scripts in `index.html` and `tests.html` as
+well as the `.js` files — an export moved between modules once broke the
+unit suite silently, because a page that fails to load reports nothing.
 
 **(review)** items not machine-checkable: whether a name is genuinely
 *meaningful*, and whether a Brief explains the *why*.

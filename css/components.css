@@ -1,10 +1,10 @@
 /* ==========================================================================
    SonicForge — Component layer
-   ========================================================================== */
+   ========================================================================= */
 
 /* ==========================================================================
    Buttons
-   ========================================================================== */
+   ========================================================================= */
 
 .btn {
   display: inline-flex;
@@ -22,7 +22,9 @@
   letter-spacing: 0.02em;
   white-space: nowrap;
   transition: background 0.16s var(--ease), border-color 0.16s var(--ease),
-    color 0.16s var(--ease), transform 0.1s var(--ease), box-shadow 0.16s var(--ease);
+    color 0.16s var(--ease),
+    transform 0.1s var(--ease),
+    box-shadow 0.16s var(--ease);
 }
 
 .btn:hover:not(:disabled) {
@@ -70,27 +72,43 @@
 }
 
 .btn--primary {
-  background: linear-gradient(135deg, rgba(0, 242, 254, 0.16), rgba(0, 242, 254, 0.05));
+  background: linear-gradient(
+    135deg,
+    rgba(0, 242, 254, 0.16),
+    rgba(0, 242, 254, 0.05)
+  );
   border-color: rgba(0, 242, 254, 0.42);
   color: var(--cyan);
   text-shadow: 0 0 12px var(--cyan-glow);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(0, 242, 254, 0.28), rgba(0, 242, 254, 0.1));
+  background: linear-gradient(
+    135deg,
+    rgba(0, 242, 254, 0.28),
+    rgba(0, 242, 254, 0.1)
+  );
   border-color: var(--cyan);
   color: #d6ffff;
   box-shadow: 0 0 18px rgba(0, 242, 254, 0.24);
 }
 
 .btn--violet {
-  background: linear-gradient(135deg, rgba(127, 0, 255, 0.2), rgba(127, 0, 255, 0.05));
+  background: linear-gradient(
+    135deg,
+    rgba(127, 0, 255, 0.2),
+    rgba(127, 0, 255, 0.05)
+  );
   border-color: rgba(168, 85, 247, 0.45);
   color: var(--violet-lite);
 }
 
 .btn--violet:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(127, 0, 255, 0.34), rgba(127, 0, 255, 0.12));
+  background: linear-gradient(
+    135deg,
+    rgba(127, 0, 255, 0.34),
+    rgba(127, 0, 255, 0.12)
+  );
   border-color: var(--violet-lite);
   color: #e9d5ff;
   box-shadow: 0 0 18px var(--violet-glow);
@@ -129,7 +147,11 @@
 }
 
 .btn--master.is-playing {
-  background: linear-gradient(135deg, rgba(255, 61, 113, 0.22), rgba(255, 61, 113, 0.06));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 61, 113, 0.22),
+    rgba(255, 61, 113, 0.06)
+  );
   border-color: rgba(255, 61, 113, 0.55);
   color: #ff9db8;
   text-shadow: 0 0 12px rgba(255, 61, 113, 0.5);
@@ -210,7 +232,7 @@
 
 /* ==========================================================================
    Inputs
-   ========================================================================== */
+   ========================================================================= */
 
 .field {
   display: flex;
@@ -281,6 +303,8 @@ select.input {
   appearance: none;
   cursor: pointer;
   padding-right: 22px;
+  /* Inline data URI. A newline inside url() changes the value, so this
+     is the one declaration in the file that cannot be wrapped. */
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%237d89a6' stroke-width='1.6'><path d='M3 4.5 6 7.5 9 4.5'/></svg>");
   background-repeat: no-repeat;
   background-position: right 6px center;
@@ -483,7 +507,7 @@ select.input option {
 
 /* ==========================================================================
    Frequency dial
-   ========================================================================== */
+   ========================================================================= */
 
 .dial-wrap {
   display: flex;
@@ -521,9 +545,15 @@ select.input option {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 32%, rgba(24, 33, 56, 0.96), rgba(6, 9, 16, 0.99));
+  background: radial-gradient(
+    circle at 50% 32%,
+    rgba(24, 33, 56, 0.96),
+    rgba(6, 9, 16, 0.99)
+  );
   border: 1px solid rgba(0, 242, 254, 0.14);
-  box-shadow: inset 0 2px 14px rgba(0, 0, 0, 0.75), 0 0 22px rgba(0, 242, 254, 0.1);
+  box-shadow:
+    inset 0 2px 14px rgba(0, 0, 0, 0.75),
+    0 0 22px rgba(0, 242, 254, 0.1);
 }
 
 .dial__note {
@@ -594,12 +624,15 @@ select.input option {
 
 /* ==========================================================================
    Channel strips
-   ========================================================================== */
+   ========================================================================= */
 
 .chan-head,
 .chan {
   display: grid;
-  grid-template-columns: 26px 30px 68px minmax(70px, 1fr) 46px minmax(56px, 78px) minmax(52px, 70px) 48px 42px;
+  /* index, power, wave, frequency, note, level, pan, phase, flags */
+  grid-template-columns:
+    26px 30px 68px minmax(70px, 1fr) 46px
+    minmax(56px, 78px) minmax(52px, 70px) 48px 42px;
   align-items: center;
   gap: 6px;
   padding: 0 8px;
@@ -754,7 +787,7 @@ select.input option {
 
 /* ==========================================================================
    Terminal
-   ========================================================================== */
+   ========================================================================= */
 
 .term {
   display: flex;
@@ -922,7 +955,7 @@ select.input option {
 
 /* ==========================================================================
    Presets
-   ========================================================================== */
+   ========================================================================= */
 
 .preset-group + .preset-group {
   margin-top: 13px;
@@ -1027,14 +1060,20 @@ select.input option {
 
 /* ==========================================================================
    Visualiser
-   ========================================================================== */
+   ========================================================================= */
 
 .viz {
   position: relative;
   width: 100%;
   min-height: 268px;
   flex: 1;
-  background: radial-gradient(circle at 50% 100%, rgba(0, 242, 254, 0.06), transparent 62%),
+  background:
+    radial-gradient(
+      circle at 50% 100%,
+      rgba(0, 242, 254, 0.06),
+      transparent 62%
+    ),
+    
     var(--onyx-900);
   overflow: hidden;
 }
@@ -1096,7 +1135,7 @@ select.input option {
 
 /* ==========================================================================
    Meters
-   ========================================================================== */
+   ========================================================================= */
 
 .meter {
   display: flex;
@@ -1116,7 +1155,13 @@ select.input option {
 .meter__bar i {
   position: absolute;
   inset: 0 100% 0 0;
-  background: linear-gradient(90deg, var(--lime) 0%, var(--lime) 62%, var(--amber) 82%, var(--rose) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--lime) 0%,
+    var(--lime) 62%,
+    var(--amber) 82%,
+    var(--rose) 100%
+  );
   background-size: 74px 100%;
   transition: right 0.06s linear;
 }
@@ -1157,7 +1202,7 @@ select.input option {
 
 /* ==========================================================================
    Badges, tabs, cards
-   ========================================================================== */
+   ========================================================================= */
 
 .badge {
   display: inline-flex;
@@ -1281,7 +1326,7 @@ select.input option {
 
 /* ==========================================================================
    Concert Mode
-   ========================================================================== */
+   ========================================================================= */
 
 .roomcode {
   font-family: var(--ff-mono);
@@ -1334,7 +1379,7 @@ select.input option {
 
 /* ==========================================================================
    Modal
-   ========================================================================== */
+   ========================================================================= */
 
 .modal-backdrop {
   position: fixed;
@@ -1396,7 +1441,7 @@ select.input option {
 
 /* ==========================================================================
    Gesture-unlock overlay
-   ========================================================================== */
+   ========================================================================= */
 
 .unlock {
   position: fixed;
@@ -1486,7 +1531,7 @@ select.input option {
 
 /* ==========================================================================
    Toast
-   ========================================================================== */
+   ========================================================================= */
 
 .toasts {
   position: fixed;
@@ -1554,7 +1599,7 @@ select.input option {
 
 /* ==========================================================================
    Misc
-   ========================================================================== */
+   ========================================================================= */
 
 .spinner {
   width: 13px;

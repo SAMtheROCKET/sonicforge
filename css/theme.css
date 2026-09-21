@@ -1,7 +1,8 @@
 /* ==========================================================================
    SonicForge — Design tokens, reset, and application shell
-   Deep onyx substrate · neon cyan actives · violet script accents · glassmorphism
-   ========================================================================== */
+   Deep onyx substrate · neon cyan actives
+   · violet script accents · glassmorphism
+   ========================================================================= */
 
 :root {
   /* --- Substrate ------------------------------------------------------- */
@@ -52,8 +53,21 @@
   --gap: 12px;
 
   /* --- Type ------------------------------------------------------------ */
-  --ff-ui: "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --ff-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --ff-ui:
+    "Inter",
+    "Segoe UI Variable",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  --ff-mono:
+    "JetBrains Mono",
+    "SF Mono",
+    "Cascadia Code",
+    ui-monospace,
+    Menlo,
+    Consolas,
+    monospace;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: dark;
@@ -61,7 +75,7 @@
 
 /* ==========================================================================
    Reset
-   ========================================================================== */
+   ========================================================================= */
 
 *,
 *::before,
@@ -94,9 +108,21 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1100px 620px at 12% -12%, rgba(0, 242, 254, 0.1), transparent 62%),
-    radial-gradient(940px 560px at 104% 8%, rgba(127, 0, 255, 0.12), transparent 60%),
-    radial-gradient(760px 700px at 48% 116%, rgba(0, 120, 255, 0.07), transparent 66%);
+    radial-gradient(
+      1100px 620px at 12% -12%,
+      rgba(0, 242, 254, 0.1),
+      transparent 62%
+    ),
+    radial-gradient(
+      940px 560px at 104% 8%,
+      rgba(127, 0, 255, 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      760px 700px at 48% 116%,
+      rgba(0, 120, 255, 0.07),
+      transparent 66%
+    );
 }
 
 button,
@@ -174,7 +200,7 @@ canvas {
 
 /* ==========================================================================
    Application shell
-   ========================================================================== */
+   ========================================================================= */
 
 #app {
   position: relative;
@@ -206,7 +232,7 @@ canvas {
 
 /* ==========================================================================
    Header
-   ========================================================================== */
+   ========================================================================= */
 
 .topbar {
   display: flex;
@@ -214,7 +240,11 @@ canvas {
   gap: 18px;
   padding: 0 16px;
   border-bottom: 1px solid var(--glass-brd);
-  background: linear-gradient(180deg, rgba(11, 15, 25, 0.9), rgba(11, 15, 25, 0.62));
+  background: linear-gradient(
+    180deg,
+    rgba(11, 15, 25, 0.9),
+    rgba(11, 15, 25, 0.62)
+  );
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
@@ -272,7 +302,7 @@ canvas {
 
 /* ==========================================================================
    Glass panels
-   ========================================================================== */
+   ========================================================================= */
 
 .panel {
   position: relative;
@@ -294,7 +324,11 @@ canvas {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 38%);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.045),
+    transparent 38%
+  );
 }
 
 /*
@@ -369,7 +403,7 @@ canvas {
 
 /* ==========================================================================
    Status bar
-   ========================================================================== */
+   ========================================================================= */
 
 .statusbar {
   display: flex;
@@ -436,7 +470,7 @@ canvas {
 
 /* ==========================================================================
    Utilities
-   ========================================================================== */
+   ========================================================================= */
 
 .row {
   display: flex;
@@ -527,7 +561,7 @@ canvas {
 
 /* ==========================================================================
    Responsive
-   ========================================================================== */
+   ========================================================================= */
 
 @media (max-width: 1500px) {
   :root {

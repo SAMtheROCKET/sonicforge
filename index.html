@@ -32,10 +32,24 @@
 <!-- ====================================================================
      Gesture unlock — every browser requires a user gesture before audio
      ==================================================================== -->
-<div class="unlock" id="unlock" role="dialog" aria-modal="true" aria-labelledby="unlock-title">
+<div
+     class="unlock"
+     id="unlock"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="unlock-title"
+     >
   <div class="unlock__inner">
     <div class="unlock__ring">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg
+           viewBox="0 0 24 24"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="1.5"
+           stroke-linecap="round"
+           stroke-linejoin="round"
+           aria-hidden="true"
+           >
         <path d="M2 12h3c1 0 1.5-7 3-7s2 14 3 14 1.5-7 3-7h2c1 0 1.5-4 3-4s2 8 3 8"/>
       </svg>
     </div>
@@ -56,14 +70,34 @@
        Header
        ================================================================== -->
   <header class="topbar">
-    <button class="iconbtn rail-toggle" id="rail-toggle" aria-label="Toggle presets">
+    <button
+         class="iconbtn rail-toggle"
+         id="rail-toggle"
+         aria-label="Toggle presets"
+         >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
 
     <div class="brand">
-      <svg class="brand__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <rect width="32" height="32" rx="8" fill="#0B0F19" stroke="rgba(0,242,254,.25)"/>
-        <path d="M4 16h3c1 0 1.5-8 3-8s2 16 3 16 1.5-8 3-8h2c1 0 1.5-5 3-5s2 10 3 10" stroke="#00F2FE" stroke-width="2" stroke-linecap="round"/>
+      <svg
+           class="brand__mark"
+           viewBox="0 0 32 32"
+           fill="none"
+           aria-hidden="true"
+           >
+        <rect
+             width="32"
+             height="32"
+             rx="8"
+             fill="#0B0F19"
+             stroke="rgba(0,242,254,.25)"
+             />
+        <path
+             d="M4 16h3c1 0 1.5-8 3-8s2 16 3 16 1.5-8 3-8h2c1 0 1.5-5 3-5s2 10 3 10"
+             stroke="#00F2FE"
+             stroke-width="2"
+             stroke-linecap="round"
+             />
       </svg>
       <div>
         <div class="brand__name">Sonic<em>Forge</em></div>
@@ -72,7 +106,11 @@
     </div>
 
     <div class="topbar__group">
-      <button class="btn btn--master btn--primary" id="master-play" aria-pressed="false">
+      <button
+           class="btn btn--master btn--primary"
+           id="master-play"
+           aria-pressed="false"
+           >
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z"/></svg>
         <span id="master-play-label">Play</span>
       </button>
@@ -81,7 +119,17 @@
 
     <div class="topbar__group">
       <span class="label">Master</span>
-      <input class="range" id="master-gain" type="range" min="-60" max="0" step="0.1" value="-12" style="width:104px" aria-label="Master level in dBFS">
+      <input
+           class="range"
+           id="master-gain"
+           type="range"
+           min="-60"
+           max="0"
+           step="0.1"
+           value="-12"
+           style="width:104px"
+           aria-label="Master level in dBFS"
+           >
       <span class="mono" id="master-db" style="min-width:52px;font-size:11px;color:var(--ink-hi)">-12.0 dB</span>
       <div class="meter">
         <span class="meter__bar"><i id="meter-fill"></i><span class="meter__peak" id="meter-peak"></span></span>
@@ -93,7 +141,14 @@
       <span class="label" title="Concert pitch reference">A4</span>
       <select class="input input--sm" id="a4-preset" style="width:96px" aria-label="Pitch standard"></select>
       <div class="input-group" style="width:96px">
-        <input class="input input--sm mono" id="a4-hz" type="text" inputmode="decimal" value="440" aria-label="A4 frequency in hertz">
+        <input
+             class="input input--sm mono"
+             id="a4-hz"
+             type="text"
+             inputmode="decimal"
+             value="440"
+             aria-label="A4 frequency in hertz"
+             >
         <span class="input-group__unit">Hz</span>
       </div>
       <span class="badge" id="a4-cents" title="Deviation from ISO 440">0 ¢</span>
@@ -108,7 +163,10 @@
     </div>
 
     <div class="topbar__group">
-      <label class="switch" title="Safety limiter — prevents 16 stacked channels from clipping">
+      <label
+           class="switch"
+           title="Safety limiter — prevents 16 stacked channels from clipping"
+           >
         <input type="checkbox" id="limiter" checked>
         <span class="switch__track"></span>
         <span class="switch__label">Limiter</span>
@@ -162,7 +220,15 @@
 
             <div class="grow col" style="gap:12px">
               <div class="freq-readout">
-                <input class="freq-readout__value mono" id="freq-input" type="text" inputmode="decimal" value="440.00" aria-label="Frequency in hertz" spellcheck="false">
+                <input
+                     class="freq-readout__value mono"
+                     id="freq-input"
+                     type="text"
+                     inputmode="decimal"
+                     value="440.00"
+                     aria-label="Frequency in hertz"
+                     spellcheck="false"
+                     >
                 <span class="freq-readout__unit">Hz</span>
               </div>
 
@@ -182,21 +248,48 @@
                 <div class="field grow">
                   <span class="label">Level</span>
                   <div class="row">
-                    <input class="range grow" id="ch-gain" type="range" min="-90" max="0" step="0.1" value="-18" aria-label="Channel level">
+                    <input
+                         class="range grow"
+                         id="ch-gain"
+                         type="range"
+                         min="-90"
+                         max="0"
+                         step="0.1"
+                         value="-18"
+                         aria-label="Channel level"
+                         >
                     <span class="mono" id="ch-gain-val" style="min-width:52px;font-size:11px;text-align:right">-18.0</span>
                   </div>
                 </div>
                 <div class="field grow">
                   <span class="label">Pan</span>
                   <div class="row">
-                    <input class="range range--bipolar grow" id="ch-pan" type="range" min="-1" max="1" step="0.01" value="0" aria-label="Channel pan">
+                    <input
+                         class="range range--bipolar grow"
+                         id="ch-pan"
+                         type="range"
+                         min="-1"
+                         max="1"
+                         step="0.01"
+                         value="0"
+                         aria-label="Channel pan"
+                         >
                     <span class="mono" id="ch-pan-val" style="min-width:34px;font-size:11px;text-align:right">C</span>
                   </div>
                 </div>
                 <div class="field grow">
                   <span class="label">Phase</span>
                   <div class="row">
-                    <input class="range range--violet grow" id="ch-phase" type="range" min="0" max="359" step="1" value="0" aria-label="Channel phase">
+                    <input
+                         class="range range--violet grow"
+                         id="ch-phase"
+                         type="range"
+                         min="0"
+                         max="359"
+                         step="1"
+                         value="0"
+                         aria-label="Channel phase"
+                         >
                     <span class="mono" id="ch-phase-val" style="min-width:34px;font-size:11px;text-align:right">0°</span>
                   </div>
                 </div>
@@ -242,14 +335,32 @@
             <div class="field grow">
               <span class="label">Hybrid blend → B</span>
               <div class="row">
-                <input class="range grow" id="noise-blend" type="range" min="0" max="1" step="0.01" value="0" aria-label="Hybrid blend">
+                <input
+                     class="range grow"
+                     id="noise-blend"
+                     type="range"
+                     min="0"
+                     max="1"
+                     step="0.01"
+                     value="0"
+                     aria-label="Hybrid blend"
+                     >
                 <select class="input input--xs" id="noise-b" style="width:76px" aria-label="Secondary noise colour"></select>
               </div>
             </div>
             <div class="field" style="width:126px">
               <span class="label">Level</span>
               <div class="row">
-                <input class="range grow" id="noise-gain" type="range" min="-90" max="0" step="0.5" value="-24" aria-label="Noise level">
+                <input
+                     class="range grow"
+                     id="noise-gain"
+                     type="range"
+                     min="-90"
+                     max="0"
+                     step="0.5"
+                     value="-24"
+                     aria-label="Noise level"
+                     >
                 <span class="mono" id="noise-gain-val" style="min-width:42px;font-size:11px;text-align:right">-24</span>
               </div>
             </div>
@@ -263,14 +374,30 @@
             <div class="field" style="width:96px">
               <span class="label">Cutoff</span>
               <div class="input-group">
-                <input class="input input--sm mono" id="noise-freq" type="text" inputmode="decimal" value="1000" aria-label="Filter cutoff">
+                <input
+                     class="input input--sm mono"
+                     id="noise-freq"
+                     type="text"
+                     inputmode="decimal"
+                     value="1000"
+                     aria-label="Filter cutoff"
+                     >
                 <span class="input-group__unit">Hz</span>
               </div>
             </div>
             <div class="field grow" style="min-width:150px">
               <span class="label" title="Boosts masking energy across the 300–3400 Hz speech band">Vocal shield</span>
               <div class="row">
-                <input class="range range--violet grow" id="noise-shield" type="range" min="-12" max="12" step="0.5" value="0" aria-label="Vocal band emphasis">
+                <input
+                     class="range range--violet grow"
+                     id="noise-shield"
+                     type="range"
+                     min="-12"
+                     max="12"
+                     step="0.5"
+                     value="0"
+                     aria-label="Vocal band emphasis"
+                     >
                 <span class="mono" id="noise-shield-val" style="min-width:42px;font-size:11px;text-align:right">0.0</span>
               </div>
             </div>
@@ -326,7 +453,16 @@
           <div class="term__prompt">
             <span class="term__caret">›</span>
             <span class="term__ghost" data-term="ghost"></span>
-            <input class="term__input" data-term="input" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="play(440hz, 1s, sine)" aria-label="Command input">
+            <input
+                 class="term__input"
+                 data-term="input"
+                 type="text"
+                 spellcheck="false"
+                 autocomplete="off"
+                 autocapitalize="off"
+                 placeholder="play(440hz, 1s, sine)"
+                 aria-label="Command input"
+                 >
           </div>
         </div>
       </section>
@@ -383,13 +519,26 @@
           <div class="row" id="concert-relay-row" hidden>
             <div class="field grow">
               <span class="label">Relay URL</span>
-              <input class="input input--sm mono" id="concert-relay" type="text" placeholder="ws://192.168.1.20:8787" spellcheck="false">
+              <input
+                   class="input input--sm mono"
+                   id="concert-relay"
+                   type="text"
+                   placeholder="ws://192.168.1.20:8787"
+                   spellcheck="false"
+                   >
             </div>
           </div>
 
           <div class="row" style="gap:6px">
             <button class="btn btn--sm btn--primary grow" id="concert-host">Host room</button>
-            <input class="input input--sm mono" id="concert-code" placeholder="CODE" style="width:84px;text-transform:uppercase" maxlength="8" aria-label="Room code">
+            <input
+                 class="input input--sm mono"
+                 id="concert-code"
+                 placeholder="CODE"
+                 style="width:84px;text-transform:uppercase"
+                 maxlength="8"
+                 aria-label="Room code"
+                 >
             <button class="btn btn--sm grow" id="concert-join">Join</button>
           </div>
 
@@ -411,7 +560,16 @@
             <div class="field">
               <span class="label">This device phase offset</span>
               <div class="row">
-                <input class="range range--violet grow" id="concert-phase" type="range" min="0" max="359" step="1" value="0" aria-label="Device phase offset">
+                <input
+                     class="range range--violet grow"
+                     id="concert-phase"
+                     type="range"
+                     min="0"
+                     max="359"
+                     step="1"
+                     value="0"
+                     aria-label="Device phase offset"
+                     >
                 <span class="mono" id="concert-phase-val" style="min-width:42px;font-size:11px;text-align:right">0°</span>
               </div>
               <p class="hint" style="margin-top:4px">

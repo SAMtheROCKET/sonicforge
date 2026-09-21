@@ -21,7 +21,12 @@
                  display: flex; align-items: center; gap: 10px; font-weight: 600;
                  font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mid); }
   .t { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: baseline;
-       padding: 5px 14px; border-top: 1px solid rgba(255,255,255,.03); font-size: 12px; }
+       padding: 5px 14px; border-top: 1px solid rgba(
+         255,
+         255,
+         255,
+         .03
+       ); font-size: 12px; }
   .t--pass .t__mark { color: var(--lime); }
   .t--fail .t__mark { color: var(--rose); }
   .t--skip .t__mark { color: var(--ink-low); }
@@ -114,7 +119,9 @@ function note(text) {
 }
 
 function fmt(v) {
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toPrecision(6);
+  if (typeof v === 'number') return Number.isInteger(v)
+    ? String(v)
+    : v.toPrecision(6);
   if (Array.isArray(v)) return `[${v.slice(0, 6).map(fmt).join(', ')}${v.length > 6 ? ', …' : ''}]`;
   if (v instanceof Float32Array || v instanceof Float64Array) return fmt(Array.from(v.slice(0, 6)));
   return String(v);
@@ -177,7 +184,8 @@ const RATE = 48000;
 
 /** Measure the average dB/octave slope of a buffer between two frequencies. */
 function measureSlope(buf, rate, loHz = 250, hiHz = 4000) {
-  const { frequencies_float64array: freqs, magnitudes_float64array: mags } = analyseRealSignalSpectrum(buf, rate, { size_int: 1 << 15  });
+  const { frequencies_float64array: freqs, magnitudes_float64array: mags } =
+    analyseRealSignalSpectrum(buf, rate, { size_int: 1 << 15  });
   const points = [];
   for (let f = loHz; f <= hiHz; f *= 2) {
     const p = measureBandPowerDb(freqs, mags, f * 0.71, f * 1.41);
@@ -195,7 +203,10 @@ function measureSlope(buf, rate, loHz = 250, hiHz = 4000) {
 }
 
 /** Render a graph-building callback offline and return channel 0. */
-async function render(build, { length = 4096, rate = RATE, channels = 1 } = {}) {
+async function render(
+  build,
+  { length = 4096, rate = RATE, channels = 1 } = {}
+) {
   const ctx = new OfflineAudioContext(channels, length, rate);
   await build(ctx);
   const buf = await ctx.startRendering();
@@ -243,7 +254,11 @@ suite('util/math', () => {
   });
 
   test('dBFS floor collapses to true silence', () => {
-    eq(convertDbToLinear(-90), 0, 'the silence floor must produce exactly zero, not a denormal');
+    eq(
+      convertDbToLinear(-90),
+      0,
+      'the silence floor must produce exactly zero, not a denormal'
+    );
     eq(convertDbToLinear(-120), 0);
   });
 
@@ -322,7 +337,10 @@ suite('dsp/fft', () => {
     for (let i = 0; i < n; i++) {
       worst = Math.max(worst, Math.abs(re[i] - orig[i]), Math.abs(im[i]));
     }
-    ok(worst < 1e-9, `round-trip error ${worst.toExponential(2)} exceeds 1e-9`);
+    ok(
+      worst < 1e-9,
+      `round-trip error ${worst.toExponential(2)} exceeds 1e-9`
+    );
   });
 
   test('Parseval: energy is conserved across the transform', () => {
@@ -344,8 +362,17 @@ suite('dsp/fft', () => {
   test('a pure sine lands in exactly one bin', () => {
     const n = 4096;
     const bin = 64;
-    const sig = Float64Array.from({ length: n }, (_, i) => Math.sin((2 * Math.PI * bin * i) / n));
-    const { magnitudes_float64array: mags } = analyseRealSignalSpectrum(sig, RATE, { size_int: n, use_window_bool: false });
+    const sig =
+      Float64Array.from(
+        { length: n },
+        (_, i) => Math.sin((2 * Math.PI * bin * i) / n)
+      );
+    const { magnitudes_float64array: mags } =
+      analyseRealSignalSpectrum(
+        sig,
+        RATE,
+        { size_int: n, use_window_bool: false }
+      );
 
     let peakBin = 0;
     for (let i = 1; i < mags.length; i++) if (mags[i] > mags[peakBin]) peakBin = i;
@@ -359,8 +386,13 @@ suite('dsp/fft', () => {
     const n = 8192;
     const bin = 171;
     const f = (bin * RATE) / n;
-    const sig = Float64Array.from({ length: n }, (_, i) => 0.5 * Math.sin((2 * Math.PI * f * i) / RATE));
-    const { frequencies_float64array: freqs, magnitudes_float64array: mags } = analyseRealSignalSpectrum(sig, RATE, { size_int: n  });
+    const sig =
+      Float64Array.from(
+        { length: n },
+        (_, i) => 0.5 * Math.sin((2 * Math.PI * f * i) / RATE)
+      );
+    const { frequencies_float64array: freqs, magnitudes_float64array: mags } =
+      analyseRealSignalSpectrum(sig, RATE, { size_int: n  });
     let peak = 0;
     let peakF = 0;
     for (let i = 0; i < mags.length; i++) if (mags[i] > peak) { peak = mags[i]; peakF = freqs[i]; }
@@ -373,17 +405,30 @@ suite('dsp/fft', () => {
     // landing between bins must stay inside that, or the window maths is wrong.
     const n = 8192;
     const f = ((171.5) * RATE) / n; // deliberately half-way between two bins
-    const sig = Float64Array.from({ length: n }, (_, i) => 0.5 * Math.sin((2 * Math.PI * f * i) / RATE));
-    const { magnitudes_float64array: mags } = analyseRealSignalSpectrum(sig, RATE, { size_int: n  });
+    const sig =
+      Float64Array.from(
+        { length: n },
+        (_, i) => 0.5 * Math.sin((2 * Math.PI * f * i) / RATE)
+      );
+    const { magnitudes_float64array: mags } =
+      analyseRealSignalSpectrum(sig, RATE, { size_int: n  });
     let peak = 0;
     for (let i = 0; i < mags.length; i++) if (mags[i] > peak) peak = mags[i];
     const lossDb = 20 * Math.log10(peak / 0.5);
     note(`scalloping loss ${lossDb.toFixed(2)} dB (Hann worst case is -1.42 dB)`);
-    within(lossDb, -1.5, 0.05, 'loss must sit within the Hann scalloping bound');
+    within(
+      lossDb,
+      -1.5,
+      0.05,
+      'loss must sit within the Hann scalloping bound'
+    );
   });
 
   test('non-power-of-two sizes are rejected', () => {
-    throws(() => new FastFourierTransform(1000), 'FFT must reject non-power-of-two sizes');
+    throws(
+      () => new FastFourierTransform(1000),
+      'FFT must reject non-power-of-two sizes'
+    );
   });
 });
 
@@ -393,7 +438,12 @@ suite('dsp/fft', () => {
 
 suite('dsp/weighting', () => {
   test('A-weighting matches IEC 61672 reference values', () => {
-    close(computeAWeightingDb(1000), 0, 0.05, 'A(1 kHz) is 0 dB by definition');
+    close(
+      computeAWeightingDb(1000),
+      0,
+      0.05,
+      'A(1 kHz) is 0 dB by definition'
+    );
     close(computeAWeightingDb(20), -50.4, 0.6, 'A(20 Hz)');
     close(computeAWeightingDb(100), -19.1, 0.4, 'A(100 Hz)');
     close(computeAWeightingDb(500), -3.2, 0.3, 'A(500 Hz)');
@@ -409,10 +459,22 @@ suite('dsp/weighting', () => {
 
   test('grey weighting inverts the ear: boosts extremes, unity at 1 kHz', () => {
     close(computeGreyWeightingMultiplier(1000), 1, 0.05, 'unity at 1 kHz');
-    ok(computeGreyWeightingMultiplier(100) > 2, 'grey must boost 100 Hz substantially');
-    ok(computeGreyWeightingMultiplier(60) > computeGreyWeightingMultiplier(200), 'boost must increase as sensitivity falls');
-    ok(computeGreyWeightingMultiplier(10) < computeGreyWeightingMultiplier(100), 'sub-audio must be rolled off, not boosted');
-    ok(computeGreyWeightingMultiplier(1000) < 2, 'never boost the reference band');
+    ok(
+      computeGreyWeightingMultiplier(100) > 2,
+      'grey must boost 100 Hz substantially'
+    );
+    ok(
+      computeGreyWeightingMultiplier(60) > computeGreyWeightingMultiplier(200),
+      'boost must increase as sensitivity falls'
+    );
+    ok(
+      computeGreyWeightingMultiplier(10) < computeGreyWeightingMultiplier(100),
+      'sub-audio must be rolled off, not boosted'
+    );
+    ok(
+      computeGreyWeightingMultiplier(1000) < 2,
+      'never boost the reference band'
+    );
   });
 
   test('fractional-octave smoothing preserves a flat response', () => {
@@ -434,7 +496,12 @@ suite('dsp/weighting', () => {
   test('curve resampling interpolates in the log-frequency domain', () => {
     const src = [100, 1000, 10000];
     const vals = [0, 10, 20];
-    const out = resampleCurveOntoLogGrid(src, vals, [316.23]); // geometric midpoint of 100..1000
+    const out =
+      resampleCurveOntoLogGrid(
+        src,
+        vals,
+        [316.23]
+      ); // geometric midpoint of 100..1000
     close(out[0], 5, 0.1, 'midpoint in log-f must be the midpoint in value');
   });
 
@@ -443,7 +510,12 @@ suite('dsp/weighting', () => {
     eq(EQ_BAND_CENTRES_HERTZ_LIST[0], 31.5);
     eq(EQ_BAND_CENTRES_HERTZ_LIST[9], 16000);
     for (let i = 1; i < EQ_BAND_CENTRES_HERTZ_LIST.length; i++) {
-      close(EQ_BAND_CENTRES_HERTZ_LIST[i] / EQ_BAND_CENTRES_HERTZ_LIST[i - 1], 2, 0.05, `band ${i} must be one octave above ${i - 1}`);
+      close(
+        EQ_BAND_CENTRES_HERTZ_LIST[i] / EQ_BAND_CENTRES_HERTZ_LIST[i - 1],
+        2,
+        0.05,
+        `band ${i} must be one octave above ${i - 1}`
+      );
     }
   });
 });
@@ -492,18 +564,23 @@ suite('dsp/noise-shapes', () => {
 
   test('grey noise boosts both extremes relative to 1 kHz', () => {
     const buf = buildNoiseBuffer('grey', LEN, RATE, { seed_int: 6 });
-    const { frequencies_float64array: freqs, magnitudes_float64array: mags } = analyseRealSignalSpectrum(buf, RATE, { size_int: 1 << 15  });
+    const { frequencies_float64array: freqs, magnitudes_float64array: mags } =
+      analyseRealSignalSpectrum(buf, RATE, { size_int: 1 << 15  });
     const low = measureBandPowerDb(freqs, mags, 80, 160);
     const mid = measureBandPowerDb(freqs, mags, 700, 1400);
     const high = measureBandPowerDb(freqs, mags, 7000, 12000);
     note(`80–160 Hz ${low.toFixed(1)} dB · 1 kHz ${mid.toFixed(1)} dB · 7–12 kHz ${high.toFixed(1)} dB`);
-    ok(low > mid + 5, 'grey must carry far more low-frequency energy than mid');
+    ok(
+      low > mid + 5,
+      'grey must carry far more low-frequency energy than mid'
+    );
     ok(high > mid, 'grey must lift the top end above mid too');
   });
 
   test('green noise peaks in the 500 Hz region', () => {
     const buf = buildNoiseBuffer('green', LEN, RATE, { seed_int: 7 });
-    const { frequencies_float64array: freqs, magnitudes_float64array: mags } = analyseRealSignalSpectrum(buf, RATE, { size_int: 1 << 15  });
+    const { frequencies_float64array: freqs, magnitudes_float64array: mags } =
+      analyseRealSignalSpectrum(buf, RATE, { size_int: 1 << 15  });
     const centre = measureBandPowerDb(freqs, mags, 350, 700);
     const low = measureBandPowerDb(freqs, mags, 40, 80);
     const high = measureBandPowerDb(freqs, mags, 6000, 12000);
@@ -513,7 +590,8 @@ suite('dsp/noise-shapes', () => {
   });
 
   test('every colour is normalised to a comparable RMS', () => {
-    const levels = NOISE_COLOUR_KEYS_LIST.map((k) => rmsOf(buildNoiseBuffer(k, 1 << 14, RATE, { seed_int: 9 })));
+    const levels =
+      NOISE_COLOUR_KEYS_LIST.map((k) => rmsOf(buildNoiseBuffer(k, 1 << 14, RATE, { seed_int: 9 })));
     for (let i = 0; i < levels.length; i++) {
       close(levels[i], 0.18, 0.02, `${NOISE_COLOUR_KEYS_LIST[i]} RMS`);
     }
@@ -534,7 +612,10 @@ suite('dsp/noise-shapes', () => {
       Array.from({ length: 500 }, (_, i) => Math.abs(buf[i + 1] - buf[i]))
     );
     note(`wrap step ${wrapStep.toExponential(2)} vs typical ${typicalStep.toExponential(2)}`);
-    ok(wrapStep < typicalStep * 12, 'the loop point must not be a discontinuity');
+    ok(
+      wrapStep < typicalStep * 12,
+      'the loop point must not be a discontinuity'
+    );
   });
 
   test('seam conditioning cross-fades time-domain buffers', () => {
@@ -551,7 +632,10 @@ suite('dsp/noise-shapes', () => {
   });
 
   test('unknown colour is rejected', () => {
-    throws(() => buildNoiseBuffer('chartreuse', 1024, RATE), 'unknown colours must throw');
+    throws(
+      () => buildNoiseBuffer('chartreuse', 1024, RATE),
+      'unknown colours must throw'
+    );
   });
 
   test('every registered colour declares metadata', () => {
@@ -580,14 +664,29 @@ suite('core/tuning', () => {
   test('equal temperament ratios are exact', () => {
     const t = new Tuning(440);
     close(t.convertMidiToHertz(60), 261.6255653, 1e-6, 'middle C');
-    close(t.convertMidiToHertz(69 + 12) / t.convertMidiToHertz(69), 2, 1e-12, 'an octave is exactly 2:1');
-    close(t.convertMidiToHertz(70) / t.convertMidiToHertz(69), 2 ** (1 / 12), 1e-12, 'a semitone is the 12th root of 2');
+    close(
+      t.convertMidiToHertz(69 + 12) / t.convertMidiToHertz(69),
+      2,
+      1e-12,
+      'an octave is exactly 2:1'
+    );
+    close(
+      t.convertMidiToHertz(70) / t.convertMidiToHertz(69),
+      2 ** (1 / 12),
+      1e-12,
+      'a semitone is the 12th root of 2'
+    );
   });
 
   test('frequency → MIDI is the inverse of MIDI → frequency', () => {
     const t = new Tuning(442);
     for (const m of [21, 60, 69, 96, 108]) {
-      close(t.convertHertzToMidi(t.convertMidiToHertz(m)), m, 1e-9, `midi ${m}`);
+      close(
+        t.convertHertzToMidi(t.convertMidiToHertz(m)),
+        m,
+        1e-9,
+        `midi ${m}`
+      );
     }
   });
 
@@ -610,12 +709,18 @@ suite('core/tuning', () => {
     eq(exact.label_str, 'A4');
     close(exact.cents_float, 0, 1e-6);
 
-    const sharp = t.describeFrequency(440 * 2 ** (25 / 1200)); // 25 cents sharp
+    const sharp =
+      t.describeFrequency(440 * 2 ** (25 / 1200)); // 25 cents sharp
     eq(sharp.label_str, 'A4');
     close(sharp.cents_float, 25, 0.01);
 
-    const next = t.describeFrequency(440 * 2 ** (60 / 1200)); // past the midpoint
-    eq(next.label_str, 'A#4', 'beyond 50 cents it must round to the next semitone');
+    const next =
+      t.describeFrequency(440 * 2 ** (60 / 1200)); // past the midpoint
+    eq(
+      next.label_str,
+      'A#4',
+      'beyond 50 cents it must round to the next semitone'
+    );
   });
 
   test('centsFrom440 reports the offset of the reference itself', () => {
@@ -679,14 +784,21 @@ suite('core/waveforms', () => {
   });
 
   test('sawtooth contains every harmonic at 1/k', () => {
-    const { imaginary_float32array: imag } = buildPhaseRotatedWaveTables('sawtooth', 0);
+    const { imaginary_float32array: imag } =
+      buildPhaseRotatedWaveTables('sawtooth', 0);
     close(Math.abs(imag[1]), 2 / Math.PI, 1e-6);
-    close(Math.abs(imag[2]), 2 / (Math.PI * 2), 1e-6, 'even harmonics are present');
+    close(
+      Math.abs(imag[2]),
+      2 / (Math.PI * 2),
+      1e-6,
+      'even harmonics are present'
+    );
     close(Math.abs(imag[3]), 2 / (Math.PI * 3), 1e-6);
   });
 
   test('triangle falls at 1/k² on odd harmonics', () => {
-    const { imaginary_float32array: imag } = buildPhaseRotatedWaveTables('triangle', 0);
+    const { imaginary_float32array: imag } =
+      buildPhaseRotatedWaveTables('triangle', 0);
     close(Math.abs(imag[1]), 8 / Math.PI ** 2, 1e-6);
     close(Math.abs(imag[3]), 8 / (Math.PI ** 2 * 9), 1e-6);
     eq(imag[2], 0);
@@ -703,14 +815,29 @@ suite('core/waveforms', () => {
   test('a 180° rotation negates the sine series', () => {
     const a = buildPhaseRotatedWaveTables('sine', 0);
     const b = buildPhaseRotatedWaveTables('sine', 180);
-    close(b.imaginary_float32array[1], -a.imaginary_float32array[1], 1e-6, '180° must invert the fundamental');
-    close(b.real_float32array[1], 0, 1e-6, 'and introduce no cosine component');
+    close(
+      b.imaginary_float32array[1],
+      -a.imaginary_float32array[1],
+      1e-6,
+      '180° must invert the fundamental'
+    );
+    close(
+      b.real_float32array[1],
+      0,
+      1e-6,
+      'and introduce no cosine component'
+    );
   });
 
   test('a 90° rotation converts sine into cosine', () => {
     const { real_float32array: real, imaginary_float32array: imag } =
       buildPhaseRotatedWaveTables('sine', 90);
-    close(real[1], 1, 1e-6, 'sin(ωt+90°) = cos(ωt), so the cosine term is unity');
+    close(
+      real[1],
+      1,
+      1e-6,
+      'sin(ωt+90°) = cos(ωt), so the cosine term is unity'
+    );
     close(imag[1], 0, 1e-6);
   });
 
@@ -718,8 +845,18 @@ suite('core/waveforms', () => {
     const a = buildPhaseRotatedWaveTables('square', 0);
     const b = buildPhaseRotatedWaveTables('square', 360);
     for (let k = 1; k < 12; k++) {
-      close(b.imaginary_float32array[k], a.imaginary_float32array[k], 1e-5, `harmonic ${k}`);
-      close(b.real_float32array[k], a.real_float32array[k], 1e-5, `harmonic ${k} cosine`);
+      close(
+        b.imaginary_float32array[k],
+        a.imaginary_float32array[k],
+        1e-5,
+        `harmonic ${k}`
+      );
+      close(
+        b.real_float32array[k],
+        a.real_float32array[k],
+        1e-5,
+        `harmonic ${k} cosine`
+      );
     }
   });
 
@@ -738,12 +875,20 @@ suite('core/waveforms', () => {
         const v = sampleWaveform(w, i / 10, 0);
         ok(Math.abs(v) <= 1.6, `${w} sample ${i} was ${v}`);
       }
-      close(sampleWaveform(w, 0.25, 0), sampleWaveform(w, 1.25, 0), 1e-9, `${w} must be periodic`);
+      close(
+        sampleWaveform(w, 0.25, 0),
+        sampleWaveform(w, 1.25, 0),
+        1e-9,
+        `${w} must be periodic`
+      );
     }
   });
 
   test('unknown waveform is rejected', () => {
-    throws(() => buildPhaseRotatedWaveTables('kazoo', 0), 'unknown waveforms must throw');
+    throws(
+      () => buildPhaseRotatedWaveTables('kazoo', 0),
+      'unknown waveforms must throw'
+    );
   });
 });
 
@@ -766,7 +911,8 @@ suite('web audio integration', () => {
       osc.start(0);
     };
 
-    const native = await render(build((o) => { o.type = 'sine'; }), { length: 2048 });
+    const native =
+      await render(build((o) => { o.type = 'sine'; }), { length: 2048 });
     const custom = await render(
       build((o, ctx) => {
         o.setPeriodicWave(ctx.createPeriodicWave(
@@ -804,7 +950,10 @@ suite('web audio integration', () => {
       if (corr > best) { best = corr; bestLag = lag; }
     }
     note(`peak correlation at lag ${bestLag} samples (quarter period = 32)`);
-    ok(Math.abs(bestLag - 32) <= 2, `expected a 32-sample lead, measured ${bestLag}`);
+    ok(
+      Math.abs(bestLag - 32) <= 2,
+      `expected a 32-sample lead, measured ${bestLag}`
+    );
   });
 
   test('two sines 180° apart cancel to silence', async () => {
@@ -840,7 +989,12 @@ suite('web audio integration', () => {
       }
     }, { length: 2048 });
 
-    close(peakOf(out.subarray(256)), 0.5, 0.02, 'two 0.25 voices in phase make 0.5');
+    close(
+      peakOf(out.subarray(256)),
+      0.5,
+      0.02,
+      'two 0.25 voices in phase make 0.5'
+    );
   });
 
   test('a gain of −6 dBFS renders at half amplitude', async () => {
@@ -870,8 +1024,13 @@ suite('web audio integration', () => {
     }, { length: Math.round(RATE * durSec) });
 
     // Halfway through an exponential 100→1600 sweep we should be at 400 Hz.
-    const mid = out.slice(Math.round(RATE * 0.25) - 1024, Math.round(RATE * 0.25) + 1024);
-    const { frequencies_float64array: freqs, magnitudes_float64array: mags } = analyseRealSignalSpectrum(mid, RATE, { size_int: 2048  });
+    const mid =
+      out.slice(
+        Math.round(RATE * 0.25) - 1024,
+        Math.round(RATE * 0.25) + 1024
+      );
+    const { frequencies_float64array: freqs, magnitudes_float64array: mags } =
+      analyseRealSignalSpectrum(mid, RATE, { size_int: 2048  });
     let peakF = 0;
     let peak = 0;
     for (let i = 1; i < mags.length; i++) if (mags[i] > peak) { peak = mags[i]; peakF = freqs[i]; }
@@ -882,7 +1041,12 @@ suite('web audio integration', () => {
   test('sweepFreqAt matches the exponential law used by the sweep', () => {
     close(computeSweepFrequencyAt(0), 20, 1e-9);
     close(computeSweepFrequencyAt(1), 20000, 1e-6);
-    close(computeSweepFrequencyAt(0.5), Math.sqrt(20 * 20000), 1e-6, 'the midpoint is the geometric mean');
+    close(
+      computeSweepFrequencyAt(0.5),
+      Math.sqrt(20 * 20000),
+      1e-6,
+      'the midpoint is the geometric mean'
+    );
   });
 
   test('a generated noise buffer plays back at the expected level', async () => {
@@ -897,7 +1061,12 @@ suite('web audio integration', () => {
       src.start(0);
     }, { length: 8192 });
 
-    close(rmsOf(out), 0.18, 0.03, 'rendered RMS must match the synthesised RMS');
+    close(
+      rmsOf(out),
+      0.18,
+      0.03,
+      'rendered RMS must match the synthesised RMS'
+    );
   });
 
   test('StereoPannerNode isolates hard-panned channels', async () => {
@@ -962,8 +1131,14 @@ suite('script/lexer', () => {
 
   test('comments are stripped', () => {
     const t = tokenize('play(440) # this is a comment\nwait(100)');
-    ok(!t.some((x) => x.value_any === 'this'), 'comment content must not tokenise');
-    ok(t.some((x) => x.value_any === 'wait'), 'code after the comment must survive');
+    ok(
+      !t.some((x) => x.value_any === 'this'),
+      'comment content must not tokenise'
+    );
+    ok(
+      t.some((x) => x.value_any === 'wait'),
+      'code after the comment must survive'
+    );
   });
 
   test('block comments are stripped and count lines', () => {
@@ -996,7 +1171,10 @@ suite('script/lexer', () => {
   test('every declared unit has a kind and scale', () => {
     for (const [k, v] of Object.entries(UNIT_SUFFIXES_DICT)) {
       ok(v.kind_str, `${k} needs a kind`);
-      ok(Number.isFinite(v.scale_float) && v.scale_float > 0, `${k} needs a positive scale`);
+      ok(
+        Number.isFinite(v.scale_float) && v.scale_float > 0,
+        `${k} needs a positive scale`
+      );
     }
   });
 });
@@ -1018,7 +1196,11 @@ suite('script/parser', () => {
   test('statements separate on newlines and semicolons', () => {
     eq(parse('play(440)\nwait(100)').body_list.length, 2);
     eq(parse('play(440); wait(100)').body_list.length, 2);
-    eq(parse('play(440)\n\n\nwait(100)').body_list.length, 2, 'blank lines are ignored');
+    eq(
+      parse('play(440)\n\n\nwait(100)').body_list.length,
+      2,
+      'blank lines are ignored'
+    );
   });
 
   test('bare words become symbolic values', () => {
@@ -1063,7 +1245,8 @@ suite('script/parser', () => {
   });
 
   test('JSON object form with cmd/args', () => {
-    const ast = parse('[{"cmd":"play","args":[440,500]},{"cmd":"wait","args":[100]}]');
+    const ast =
+      parse('[{"cmd":"play","args":[440,500]},{"cmd":"wait","args":[100]}]');
     eq(ast.body_list.length, 2);
     eq(ast.body_list[0].name_str, 'play');
     eq(ast.body_list[1].name_str, 'wait');
@@ -1094,7 +1277,10 @@ suite('script/parser', () => {
       throw new Error('should have thrown');
     } catch (err) {
       eq(err.name, 'ScriptError');
-      ok(err.message.includes(')'), `message should mention the paren: ${err.message}`);
+      ok(
+        err.message.includes(')'),
+        `message should mention the paren: ${err.message}`
+      );
     }
   });
 
@@ -1125,7 +1311,10 @@ suite('script/commands', () => {
   test('every command declares a full help contract', () => {
     for (const name of COMMAND_NAMES) {
       const c = COMMANDS[name];
-      ok(c.signature?.includes(name), `${name}: signature must name the command`);
+      ok(
+        c.signature?.includes(name),
+        `${name}: signature must name the command`
+      );
       ok(c.help?.length > 10, `${name}: needs a real help string`);
       ok(c.example?.includes(name), `${name}: example must use the command`);
       ok(typeof c.run === 'function', `${name}: needs a run()`);
@@ -1134,7 +1323,10 @@ suite('script/commands', () => {
 
   test('the documented command set is present', () => {
     for (const required of ['play', 'sweep', 'wait', 'loop']) {
-      ok(COMMAND_NAMES.includes(required), `${required}() is part of the public contract`);
+      ok(
+        COMMAND_NAMES.includes(required),
+        `${required}() is part of the public contract`
+      );
     }
   });
 
@@ -1157,12 +1349,17 @@ suite('script/commands', () => {
 suite('util/qr', () => {
   test('short payloads pick low versions with correct dimensions', () => {
     const qr = encodeQR('HELLO');
-    eq(qr.size_int, qr.version_int * 4 + 17, 'size must follow the version formula');
+    eq(
+      qr.size_int,
+      qr.version_int * 4 + 17,
+      'size must follow the version formula'
+    );
     within(qr.version_int, 1, 3, 'a 5-byte payload should fit a tiny version');
   });
 
   test('a realistic join URL encodes', () => {
-    const url = 'https://sonicforge.app/#r=K7M3QX&s=ws%3A%2F%2F192.168.1.20%3A8787';
+    const url =
+      'https://sonicforge.app/#r=K7M3QX&s=ws%3A%2F%2F192.168.1.20%3A8787';
     const qr = encodeQR(url);
     note(`${url.length} bytes → version ${qr.version_int}, ${qr.size_int}×${qr.size_int}, mask ${qr.mask_int}`);
     within(qr.version_int, 3, 10);
@@ -1265,7 +1462,10 @@ suite('sync/transport', () => {
     for (let i = 0; i < 200; i++) {
       const code = makeRoomCode(6);
       eq(code.length, 6);
-      ok(!/[0O1IlS5B8Z2]/.test(code), `"${code}" contains an ambiguous character`);
+      ok(
+        !/[0O1IlS5B8Z2]/.test(code),
+        `"${code}" contains an ambiguous character`
+      );
     }
   });
 
@@ -1276,7 +1476,12 @@ suite('sync/transport', () => {
   });
 
   test('signalling payloads round-trip', () => {
-    const obj = { room: 'ABC123', from: 'deadbeef', sdp: { type: 'offer', sdp: 'v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n' } };
+    const obj =
+      {
+        room: 'ABC123',
+        from: 'deadbeef',
+        sdp: { type: 'offer', sdp: 'v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n' }
+      };
     const code = encodeSignal(obj);
     ok(code.startsWith('SF1:'), 'codes must be namespaced');
     const back = decodeSignal(code);
@@ -1290,9 +1495,14 @@ suite('sync/transport', () => {
   });
 
   test('whitespace in a pasted code is tolerated', () => {
-    const code = encodeSignal({ room: 'X', sdp: { type: 'answer', sdp: 'test' } });
+    const code =
+      encodeSignal({ room: 'X', sdp: { type: 'answer', sdp: 'test' } });
     const mangled = code.slice(0, 10) + '\n  ' + code.slice(10);
-    eq(decodeSignal(mangled).room, 'X', 'line wrapping from a paste must not break decoding');
+    eq(
+      decodeSignal(mangled).room,
+      'X',
+      'line wrapping from a paste must not break decoding'
+    );
   });
 });
 
@@ -1402,7 +1612,9 @@ async function run() {
       await new Promise((r) => setTimeout(r, 0));
     }
 
-    count.textContent = sFail ? `${sPass} pass, ${sFail} FAIL` : `${sPass} pass`;
+    count.textContent = sFail
+      ? `${sPass} pass, ${sFail} FAIL`
+      : `${sPass} pass`;
     count.style.color = sFail ? 'var(--rose)' : 'var(--lime)';
   }
 

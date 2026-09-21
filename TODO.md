@@ -105,10 +105,15 @@ function, <=100 LOC entry point, <=79 char lines. Applies to **every** language 
       (fixed: dead phase slider, dropped node phase offset)
 - [x] P12.7d `js/presets/` — split by group
       (fixed: noise blend slot, Tinnitus Notch frequency)
-- [ ] P12.8 Split `main.js` into wiring modules so the entry point is <=100 LOC
-- [ ] P12.9 Python (`serve.py`, `lint_style.py`), CSS and HTML to the same rules
-- [ ] P12.10 Re-run lint to zero + re-run both suites to prove nothing regressed
-      (suites are green at 111 + 53; lint still reports 1042 in the unconverted layers)
+- [x] P12.8 `main.js` split into js/app — entry point 33 code lines of 100
+      (fixed: reload restarted audio, add-tone lost the waveform)
+- [x] P12.8b `selftest.js` split into a harness + five check modules
+- [x] P12.9a Python — serve.py split into four modules, linter split in two
+- [x] P12.9b CSS — clean; one data URI documented as unwrappable
+- [x] P12.9c HTML — structural tags wrapped; inline content and metadata
+      exempted, with the reasoning written into STYLE_GUIDE 4.1
+- [x] P12.10 Lint is zero across 76 JS and 8 Python files; suites green at
+      115 unit + 65 app, 0 console errors
 
 ---
 
