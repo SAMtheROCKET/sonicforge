@@ -35,7 +35,11 @@ import { Waterfall } from './viz/waterfall.js';
 import { InterferenceView } from './viz/interference.js';
 
 import { FrequencyDial } from './ui/dial.js';
-import { ChannelRackUI, paintRange, paintBipolar } from './ui/channels.js';
+import {
+  ChannelRackUI,
+  paintUnipolarRange,
+  paintBipolarRange,
+} from './ui/channels.js';
 import { Terminal } from './ui/terminal.js';
 import { CalibrationPanel, ConcertPanel } from './ui/panels.js';
 import { showToast, requestConfirmation } from './ui/feedback.js';
@@ -85,11 +89,11 @@ const app = {
   },
 
   get selectedChannel() {
-    return this.rack?.getChannel(this.ui.channels?.selected ?? 0) ?? null;
+    return this.rack?.getChannel(this.ui.channels?.selected_index_int ?? 0) ?? null;
   },
 
   selectChannel(i) {
-    this.ui.channels?.select(i);
+    this.ui.channels?.selectChannel(i);
   },
 
   setVizMode(mode) {
@@ -238,10 +242,10 @@ function buildHeader() {
   gain.addEventListener('input', () => {
     app.engine.masterLevelDb = Number(gain.value);
     $('master-db').textContent = `${formatDb(app.engine.masterLevelDb)} dB`;
-    paintRange(gain);
+    paintUnipolarRange(gain);
   });
   gain.value = String(app.engine.masterLevelDb);
-  paintRange(gain);
+  paintUnipolarRange(gain);
 
   // --- A4 calibration -------------------------------------------------
   const sel = $('a4-preset');
@@ -452,7 +456,7 @@ function buildOscillator() {
     free.setFrequencyHertz(src ? src.frequency_hertz_float * 1.5 : 440); // a perfect fifth above
     free.setGainDb(-18);
     free.start();
-    app.ui.channels.select(free.index_int);
+    app.ui.channels.selectChannel(free.index_int);
     syncHeader();
   });
 
@@ -461,7 +465,7 @@ function buildOscillator() {
   chGain.addEventListener('input', () => {
     app.selectedChannel?.setGainDb(Number(chGain.value));
     $('ch-gain-val').textContent = formatDb(Number(chGain.value));
-    paintRange(chGain);
+    paintUnipolarRange(chGain);
   });
 
   const chPan = $('ch-pan');
@@ -469,7 +473,7 @@ function buildOscillator() {
     const v = Number(chPan.value);
     app.selectedChannel?.setPanPosition(v);
     $('ch-pan-val').textContent = panLabel(v);
-    paintBipolar(chPan);
+    paintBipolarRange(chPan);
   });
   chPan.addEventListener('dblclick', () => {
     chPan.value = '0';
@@ -481,7 +485,7 @@ function buildOscillator() {
     const v = Number(chPhase.value);
     app.selectedChannel?.setPhaseDegrees(v);
     $('ch-phase-val').textContent = `${v}°`;
-    paintRange(chPhase);
+    paintUnipolarRange(chPhase);
   });
 }
 
@@ -526,17 +530,17 @@ function syncOscillatorPanel() {
   const chGain = $('ch-gain');
   chGain.value = String(ch.gain_db_float);
   $('ch-gain-val').textContent = formatDb(ch.gain_db_float);
-  paintRange(chGain);
+  paintUnipolarRange(chGain);
 
   const chPan = $('ch-pan');
   chPan.value = String(ch.pan_position_float);
   $('ch-pan-val').textContent = panLabel(ch.pan_position_float);
-  paintBipolar(chPan);
+  paintBipolarRange(chPan);
 
   const chPhase = $('ch-phase');
   chPhase.value = String(ch.phase_degrees_int);
   $('ch-phase-val').textContent = `${ch.phase_degrees_int}°`;
-  paintRange(chPhase);
+  paintUnipolarRange(chPhase);
 
   app.ui.dial?.setFrequencyHertz(ch.frequency_hertz_float, { is_silent_bool: true });
 }
@@ -545,7 +549,7 @@ function syncOscillatorPanel() {
 
 function buildChannels() {
   app.ui.channels = new ChannelRackUI($('chan-list'), app.rack, TUNING_OBJ, {
-    onSelect: () => syncOscillatorPanel(),
+    on_select_fn: () => syncOscillatorPanel(),
   });
 
   app.rack.on('change', () => {
@@ -608,7 +612,7 @@ function buildNoiseBuffer() {
   const blend = $('noise-blend');
   blend.addEventListener('input', async () => {
     await app.noise.setBlendRatio(Number(blend.value));
-    paintRange(blend);
+    paintUnipolarRange(blend);
     syncNoisePanel();
   });
 
@@ -616,14 +620,14 @@ function buildNoiseBuffer() {
   gain.addEventListener('input', () => {
     app.noise.setGainDb(Number(gain.value));
     $('noise-gain-val').textContent = formatDb(Number(gain.value), 0);
-    paintRange(gain);
+    paintUnipolarRange(gain);
   });
 
   const shield = $('noise-shield');
   shield.addEventListener('input', () => {
     app.noise.setShieldDb(Number(shield.value));
     $('noise-shield-val').textContent = Number(shield.value).toFixed(1);
-    paintRange(shield);
+    paintUnipolarRange(shield);
   });
 
   const toggle = $('noise-toggle');
@@ -657,17 +661,17 @@ function syncNoisePanel() {
 
   const blend = $('noise-blend');
   blend.value = String(n.blend_ratio_float);
-  paintRange(blend);
+  paintUnipolarRange(blend);
 
   const gain = $('noise-gain');
   gain.value = String(n.gain_db_float);
   $('noise-gain-val').textContent = formatDb(n.gain_db_float, 0);
-  paintRange(gain);
+  paintUnipolarRange(gain);
 
   const shield = $('noise-shield');
   shield.value = String(n.shield_db_float);
   $('noise-shield-val').textContent = n.shield_db_float.toFixed(1);
-  paintRange(shield);
+  paintUnipolarRange(shield);
 
   $('noise-shape').value = n.shape_type_str;
   $('noise-freq').value = String(Math.round(n.shape_frequency_hertz_float));
@@ -815,7 +819,7 @@ async function launchPreset(preset, btn) {
       app.engine.masterLevelDb = preset.safety.capDb;
       $('master-gain').value = String(preset.safety.capDb);
       $('master-db').textContent = `${formatDb(preset.safety.capDb)} dB`;
-      paintRange($('master-gain'));
+      paintUnipolarRange($('master-gain'));
       app.log(`Master capped at ${formatDb(preset.safety.capDb)} dBFS for this routine.`, 'warn');
     }
   }
@@ -991,8 +995,8 @@ function bindShortcuts() {
       case 'ArrowDown': {
         e.preventDefault();
         const dir = e.key === 'ArrowUp' ? -1 : 1;
-        app.ui.channels.select(
-          (app.ui.channels.selected + dir + CHANNEL_COUNT_INT) % CHANNEL_COUNT_INT
+        app.ui.channels.selectChannel(
+          (app.ui.channels.selected_index_int + dir + CHANNEL_COUNT_INT) % CHANNEL_COUNT_INT
         );
         break;
       }
@@ -1002,7 +1006,7 @@ function bindShortcuts() {
         if (/^[1-9]$/.test(e.key)) {
           const ch = app.rack.getChannel(Number(e.key) - 1);
           ch?.toggle();
-          app.ui.channels.select(ch.index_int);
+          app.ui.channels.selectChannel(ch.index_int);
           syncHeader();
         }
     }
@@ -1086,7 +1090,7 @@ function restoreSession() {
     app.engine.masterLevelDb = data.masterDb;
     $('master-gain').value = String(data.masterDb);
     $('master-db').textContent = `${formatDb(data.masterDb)} dB`;
-    paintRange($('master-gain'));
+    paintUnipolarRange($('master-gain'));
   }
 
   // Channels are restored in a stopped state deliberately: nobody wants a

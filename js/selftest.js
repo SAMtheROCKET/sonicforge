@@ -132,6 +132,46 @@ export async function runSelfTest(app, { boot }) {
     return started ? 'started + stopped cleanly' : false;
   });
 
+  // Drives the row's own text field rather than the model, because the
+  // field's commit path reaches the rack and the engine by paths the model
+  // API never touches. One of those references was stale and threw here.
+  check('channel row frequency field commits', () => {
+    const row = document.querySelector('#chan-list .chan[data-index="0"]');
+    const field = row?.querySelector('[data-role="freq"]');
+    if (!field) {
+      return verdict(false, 'row 0 has no frequency field');
+    }
+    const channel = app.rack.getChannel(0);
+    const before = channel.frequency_hertz_float;
+    field.value = '523.25';
+    field.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true,
+    }));
+    const after = channel.frequency_hertz_float;
+    channel.setFrequencyHertz(before);
+    return verdict(
+      Math.abs(after - 523.25) < 0.01,
+      `${before.toFixed(2)} Hz -> ${after.toFixed(2)} Hz`
+    );
+  });
+
+  check('channel row level field accepts -inf', () => {
+    const row = document.querySelector('#chan-list .chan[data-index="1"]');
+    const field = row?.querySelector('[data-role="gain"]');
+    if (!field) {
+      return verdict(false, 'row 1 has no level field');
+    }
+    const channel = app.rack.getChannel(1);
+    const before = channel.gain_db_float;
+    field.value = '-inf';
+    field.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true,
+    }));
+    const silenced = channel.gain_db_float;
+    channel.setGainDb(before);
+    return verdict(silenced <= -90, `level became ${silenced} dBFS`);
+  });
+
   check('frequency clamps to Nyquist', () => {
     const ch = app.rack.getChannel(1);
     ch.setFrequencyHertz(999999);
