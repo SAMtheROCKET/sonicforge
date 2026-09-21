@@ -62,6 +62,13 @@ FUNCTION_START_PATTERN = re.compile(
     r"([A-Za-z_$#][\w$]*)\s*\([^)]*\)\s*\{"
 )
 
+FUNCTION_EXPRESSION_PATTERN = re.compile(
+    r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+    r"(?:async\s+)?(?:function\b"
+    r"|\([^)]*\)\s*=>"
+    r"|[A-Za-z_$][\w$]*\s*=>)"
+)
+
 CONST_DECLARATION_PATTERN = re.compile(
     r"^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*="
 )
@@ -246,13 +253,18 @@ def check_function_lengths(lines_list, path_str, report_obj):
         (none)
     """
     for line_index_int, line_str in enumerate(lines_list):
-        match_obj = FUNCTION_START_PATTERN.match(line_str)
+        match_obj = (
+            FUNCTION_START_PATTERN.match(line_str)
+            or FUNCTION_EXPRESSION_PATTERN.match(line_str)
+        )
         if not match_obj:
             continue
         if "{" not in line_str:
             continue
 
-        function_name_str = match_obj.group(1) or match_obj.group(2) or "?"
+        function_name_str = next(
+            (group_str for group_str in match_obj.groups() if group_str), "?"
+        )
         if function_name_str in ("if", "for", "while", "switch", "catch"):
             continue
 
@@ -424,7 +436,11 @@ def check_variable_naming(lines_list, path_str, report_obj):
         if line_str.lstrip().startswith(("import ", "export {", "//", "*")):
             continue
 
+        function_match_obj = FUNCTION_EXPRESSION_PATTERN.match(line_str)
+
         for name_str in VARIABLE_DECLARATION_PATTERN.findall(line_str):
+            if function_match_obj and function_match_obj.group(1) == name_str:
+                continue
             if name_str in EXEMPT_IDENTIFIERS_SET:
                 continue
             if name_str.isupper():

@@ -116,7 +116,7 @@ export async function runSelfTest(app, { boot }) {
   );
   check('dial constructed', () => Boolean(app.ui.dial));
   check('terminal constructed', () => Boolean(app.ui.terminal));
-  check('visualiser constructed', () => app.ui.waterfall?.mode ?? false);
+  check('visualiser constructed', () => app.ui.waterfall?.render_mode_str ?? false);
   check('interference view constructed', () => Boolean(app.ui.interference));
   check('sample-rate selector populated', () =>
     document.querySelectorAll('#sample-rate option').length >= 4
@@ -256,7 +256,36 @@ export async function runSelfTest(app, { boot }) {
   // Let a few animation frames run so the render loops are exercised.
   await sleep(700);
 
-  check('frame loop did not throw', () => consoleErrors.length === 0 || consoleErrors.join(' | '));
+  // Every visualiser, not just the default one. The interference and
+  // goniometer views read the meter's stereo pair, and a rename on that
+  // method threw on their first frame while the waterfall - the only mode
+  // this suite used to visit - stayed perfectly green.
+  const vizModesTried = [];
+  for (const vizName of ['interference', 'gonio', 'waterfall']) {
+    app.setVizMode(vizName);
+    await sleep(220);
+    vizModesTried.push(vizName);
+  }
+  check('every visualiser mode renders', () =>
+    verdict(
+      vizModesTried.length === 3,
+      vizModesTried.join(', ')
+    )
+  );
+  check('interference view still animating', () => {
+    app.setVizMode('interference');
+    const iv = app.ui.interference;
+    return verdict(
+      iv.is_running_bool && iv.stats_obj.voice_count_int >= 0,
+      `running=${iv.is_running_bool}`
+    );
+  });
+
+  // Returning the joined errors as a string would be scored as a pass by
+  // the check() contract, which is how a real throw once stayed green.
+  check('frame loop did not throw', () =>
+    verdict(consoleErrors.length === 0, consoleErrors.join(' | '))
+  );
   check('meter reads without error', () => {
     const levels_obj = app.engine.meter.readLevels();
     return Number.isFinite(levels_obj.peak_linear_float) ? `peak=${levels_obj.peak_linear_float.toFixed(5)}` : false;
@@ -448,7 +477,7 @@ export async function runSelfTest(app, { boot }) {
     pass: checks.length - failed.length,
     fail: failed.length,
     ms: Math.round(performance.now() - t0),
-    vizMode: app.ui.waterfall?.mode,
+    vizMode: app.ui.waterfall?.render_mode_str,
     sampleRate: app.engine.sampleRateHertz,
     consoleErrors,
     checks: checks.map((c) => ({ name: c.name, ok: c.ok, detail: c.detail })),

@@ -694,8 +694,8 @@ function buildViz() {
   app.ui.waterfall = new Waterfall($('viz-waterfall'), app.engine);
   app.ui.interference = new InterferenceView($('viz-interference'), app.engine, app.rack);
 
-  $('viz-badge').textContent = app.ui.waterfall.mode === 'webgl' ? 'WebGL2' : 'Canvas2D';
-  if (app.ui.waterfall.mode !== 'webgl') {
+  $('viz-badge').textContent = app.ui.waterfall.render_mode_str === 'webgl' ? 'WebGL2' : 'Canvas2D';
+  if (app.ui.waterfall.render_mode_str !== 'webgl') {
     app.log('WebGL2 is unavailable — the visualiser is running its Canvas2D fallback.', 'warn');
   }
 
@@ -719,7 +719,7 @@ function setVizMode(mode) {
   if (showWaterfall) { iv.stop(); wf.start(); }
   else {
     wf.stop();
-    iv.setMode(mode === 'gonio' ? 'gonio' : 'both').start();
+    iv.setDisplayMode(mode === 'gonio' ? 'gonio' : 'both').start();
   }
 
   for (const b of $('viz-tabs').querySelectorAll('[data-viz]')) {
@@ -733,7 +733,7 @@ function setVizMode(mode) {
       : 'Cyan = left sum · violet = right sum · red dots = nulls';
   syncVisualiserHint();
   $('viz-badge').textContent = showWaterfall
-    ? (wf.mode === 'webgl' ? 'WebGL2' : 'Canvas2D')
+    ? (wf.render_mode_str === 'webgl' ? 'WebGL2' : 'Canvas2D')
     : mode === 'gonio' ? 'Goniometer' : 'Interference';
 }
 
@@ -920,7 +920,7 @@ function startFrameLoop() {
       stGr.textContent = `${gr.toFixed(1)} dB`;
       stGr.style.color = gr < -0.5 ? 'var(--amber)' : '';
 
-      const fps = vizMode === 'waterfall' ? app.ui.waterfall.fps : 60;
+      const fps = vizMode === 'waterfall' ? app.ui.waterfall.frames_per_second_float : 60;
       stFps.textContent = String(Math.round(fps));
 
       // Visualiser HUD
@@ -930,10 +930,14 @@ function startFrameLoop() {
           ? `<span>VOICES <b>${audible.length}</b></span><span>PEAK <b>${Number.isFinite(levels_obj.peak_db_float) ? levels_obj.peak_db_float.toFixed(1) : '-inf'} dB</b></span><span>20 Hz → 20 kHz</span>`
           : '<span>20 Hz → 20 kHz log</span>';
       } else {
-        const s = app.ui.interference.stats;
-        vizHud.innerHTML = `<span>VOICES <b>${s.voices}</b></span>` +
-          (s.beatHz > 0 ? `<span>BEAT <b>${s.beatHz.toFixed(2)} Hz</b></span>` : '') +
-          (s.voices > 1 ? `<span>SUM <b>${(s.cancellation * 100).toFixed(0)}%</b></span>` : '');
+        const stats_obj = app.ui.interference.stats_obj;
+        vizHud.innerHTML = `<span>VOICES <b>${stats_obj.voice_count_int}</b></span>` +
+          (stats_obj.beat_hertz_float > 0
+            ? `<span>BEAT <b>${stats_obj.beat_hertz_float.toFixed(2)} Hz</b></span>`
+            : '') +
+          (stats_obj.voice_count_int > 1
+            ? `<span>SUM <b>${(stats_obj.cancellation_ratio_float * 100).toFixed(0)}%</b></span>`
+            : '');
       }
 
       syncVisualiserHint();

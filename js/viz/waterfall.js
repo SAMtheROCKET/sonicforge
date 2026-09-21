@@ -1,30 +1,95 @@
 /**
- * 3D spectrogram / waterfall.
+ * 3D spectrogram / waterfall surface.
  *
- *   X  historical time   (rows scroll away from the viewer)
- *   Y  amplitude          (vertex displacement + colour)
- *   Z  frequency          (log-spaced, 20 Hz at the left edge, 20 kHz at the right)
+ * Brief:
+ *   X is historical time, with rows scrolling away from the viewer; Y is
+ *   amplitude, carried by both vertex displacement and colour; Z is
+ *   frequency, log-spaced from the infrasonic floor to Nyquist.
  *
- * Each frame the analyser's linear FFT bins are resampled onto a log-frequency
- * grid on the CPU, quantised to 8 bits, and pushed into one row of a ring-buffer
- * texture. The vertex shader then reads that texture to displace a static mesh,
- * so scrolling the history costs a single `texSubImage2D` of one row per frame
- * rather than rebuilding geometry.
+ *   Each frame the analyser's linear FFT bins are resampled onto a
+ *   log-frequency grid on the CPU, quantised to 8 bits, and pushed into one
+ *   row of a ring-buffer texture. The vertex shader reads that texture to
+ *   displace a static mesh, so advancing the history costs a single
+ *   texSubImage2D of one row per frame rather than rebuilding geometry.
  */
 
-import { getGL, link, locations, buffer, heightTexture, resizeToDisplay, orbitControls, GLError } from './glutil.js';
+import {
+  createWebgl2Context,
+  linkShaderProgram,
+  collectProgramLocations,
+  createGpuBuffer,
+  createHeightTexture,
+  resizeCanvasToDisplay,
+  attachOrbitControls,
+  GLError,
+} from './glutil.js';
 import { mapPositionToFrequency } from '../util/frequency.js';
 import { Matrix4 } from '../util/matrix4.js';
 import { clampToRange } from '../util/numeric.js';
 
-const FREQ_POINTS = 200;   // mesh resolution along Z
-const HISTORY = 176;       // mesh resolution along X (rows of history)
-const MIN_DB = -96;
-const MAX_DB = -12;
+/* ---------------------------------------------------------------------------
+ * Constants
+ * ------------------------------------------------------------------------ */
+
+/** Mesh resolution along the frequency axis. */
+const FREQUENCY_POINT_COUNT_INT = 200;
+
+/** Mesh resolution along the time axis, in rows of history. */
+const HISTORY_ROW_COUNT_INT = 176;
+
+/** Decibel window mapped onto the 0-255 height range. */
+const MIN_DISPLAY_DB_FLOAT = -96;
+const MAX_DISPLAY_DB_FLOAT = -12;
+
+/**
+ * Low edge of the displayed band, in hertz.
+ *
+ * 5 Hz rather than the conventional 20 Hz because infrasonic work - candle
+ * flicker, thermoacoustic forcing - lives entirely below the audible floor
+ * and has to be visible here.
+ */
+const DISPLAY_LOW_HERTZ_FLOAT = 5;
+
+/** High edge of the displayed band, capped so the grid stays readable. */
+const DISPLAY_HIGH_HERTZ_FLOAT = 48000;
+
+/** Vertex displacement multiplier, and the range the caller may set. */
+const DEFAULT_AMPLITUDE_LIFT_FLOAT = 0.95;
+const MIN_AMPLITUDE_LIFT_FLOAT = 0.15;
+const MAX_AMPLITUDE_LIFT_FLOAT = 2.2;
+
+/** Starting camera pose: slightly off-axis, looking down on the surface. */
+const DEFAULT_CAMERA_OBJ = Object.freeze({
+  azimuth: -0.62,
+  elevation: 0.52,
+  radius: 3.5,
+});
+
+/** Perspective frustum. */
+const FIELD_OF_VIEW_RADIANS_FLOAT = Math.PI / 4.2;
+const NEAR_PLANE_FLOAT = 0.1;
+const FAR_PLANE_FLOAT = 40;
+
+/** Orbit centre and look-at target, chosen so the surface sits centred. */
+const ORBIT_CENTRE_TUPLE = Object.freeze([0, 0.22, 0]);
+const LOOK_AT_TARGET_TUPLE = Object.freeze([0, 0.16, 0]);
+const WORLD_UP_TUPLE = Object.freeze([0, 1, 0]);
+
+/** Smoothing pole for the reported frame rate. */
+const FPS_SMOOTHING_FLOAT = 0.9;
+
+/** Rows kept by the Canvas2D fallback, which cannot afford the full mesh. */
+const CANVAS_HISTORY_ROW_COUNT_INT = 90;
+
+/** Device pixel ratio cap for the Canvas2D fallback. */
+const CANVAS_MAX_PIXEL_RATIO_FLOAT = 1.5;
+
+/** Two triangles, six indices, per grid quad. */
+const INDICES_PER_QUAD_INT = 6;
 
 /* ------------------------------------------------------------------------ */
 
-const VERT = `#version 300 es
+const VERTEX_SHADER_SOURCE_STR = `#version 300 es
 precision highp float;
 
 in vec2 aGrid;              // x = freq index 0..1, y = history index 0..1
@@ -59,7 +124,7 @@ void main() {
   gl_Position = uViewProj * vec4(x, y, z, 1.0);
 }`;
 
-const FRAG = `#version 300 es
+const FRAGMENT_SHADER_SOURCE_STR = `#version 300 es
 precision highp float;
 
 in float vAmp;
@@ -97,7 +162,8 @@ void main() {
   // Lift the leading edge so the "now" row reads as the live one.
   col += vec3(0.0, 0.35, 0.45) * pow(1.0 - vAge, 14.0) * 0.8;
 
-  float alpha = mix(0.10, 1.0, smoothstep(0.02, 0.35, a)) * (1.0 - vAge * 0.55);
+  float alpha = mix(0.10, 1.0, smoothstep(0.02, 0.35, a))
+              * (1.0 - vAge * 0.55);
   alpha = max(alpha, uWire * 0.14);
 
   fragColor = vec4(col, alpha);
@@ -105,102 +171,219 @@ void main() {
 
 /* ------------------------------------------------------------------------ */
 
-export class Waterfall {
-  mode = 'webgl';
-  running = false;
+/**
+ * Build the static grid mesh the vertex shader displaces.
+ *
+ * Brief:
+ *   Positions carry normalised grid coordinates only. Every world-space
+ *   value is derived in the shader from the height texture, which is what
+ *   lets the surface animate without touching the vertex buffer again.
+ *
+ * Arguments:
+ *   (none)
+ *
+ * Returns:
+ *   (Object): { positions_float32array, indices_uint32array }.
+ */
+function buildGridMesh() {
+  const positions_float32array = new Float32Array(
+    FREQUENCY_POINT_COUNT_INT * HISTORY_ROW_COUNT_INT * 2
+  );
+  let write_index_int = 0;
+  for (let row_int = 0; row_int < HISTORY_ROW_COUNT_INT; row_int++) {
+    for (let column_int = 0;
+      column_int < FREQUENCY_POINT_COUNT_INT; column_int++) {
+      positions_float32array[write_index_int++] =
+        column_int / (FREQUENCY_POINT_COUNT_INT - 1);
+      positions_float32array[write_index_int++] =
+        row_int / (HISTORY_ROW_COUNT_INT - 1);
+    }
+  }
 
-  camera = { azimuth: -0.62, elevation: 0.52, radius: 3.5 };
+  const quad_count_int =
+    (FREQUENCY_POINT_COUNT_INT - 1) * (HISTORY_ROW_COUNT_INT - 1);
+  const indices_uint32array = new Uint32Array(
+    quad_count_int * INDICES_PER_QUAD_INT
+  );
+  let index_cursor_int = 0;
+  for (let row_int = 0; row_int < HISTORY_ROW_COUNT_INT - 1; row_int++) {
+    for (let column_int = 0;
+      column_int < FREQUENCY_POINT_COUNT_INT - 1; column_int++) {
+      const near_left_int = row_int * FREQUENCY_POINT_COUNT_INT + column_int;
+      const near_right_int = near_left_int + 1;
+      const far_left_int = near_left_int + FREQUENCY_POINT_COUNT_INT;
+      const far_right_int = far_left_int + 1;
+      indices_uint32array[index_cursor_int++] = near_left_int;
+      indices_uint32array[index_cursor_int++] = far_left_int;
+      indices_uint32array[index_cursor_int++] = near_right_int;
+      indices_uint32array[index_cursor_int++] = near_right_int;
+      indices_uint32array[index_cursor_int++] = far_left_int;
+      indices_uint32array[index_cursor_int++] = far_right_int;
+    }
+  }
+
+  return { positions_float32array, indices_uint32array };
+}
+
+/**
+ * Find the geometric-mean band edges around one log grid point.
+ *
+ * Brief:
+ *   Geometric rather than arithmetic means, because the grid is logarithmic
+ *   and an arithmetic midpoint would bias every band upward.
+ *
+ * Arguments:
+ *   grid_frequencies_float64array (Float64Array): The log grid.
+ *   point_index_int (number): Grid point to bracket.
+ *   low_hertz_float (number): Frequency at the left edge of the display.
+ *   high_hertz_float (number): Frequency at the right edge of the display.
+ *
+ * Returns:
+ *   (Object): { lower_hertz_float, upper_hertz_float }.
+ */
+function computeBandEdges(
+  grid_frequencies_float64array,
+  point_index_int,
+  low_hertz_float,
+  high_hertz_float
+) {
+  const is_first_bool = point_index_int === 0;
+  const is_last_bool = point_index_int === FREQUENCY_POINT_COUNT_INT - 1;
+
+  const lower_hertz_float = is_first_bool
+    ? low_hertz_float
+    : Math.sqrt(
+      grid_frequencies_float64array[point_index_int - 1] *
+      grid_frequencies_float64array[point_index_int]
+    );
+  const upper_hertz_float = is_last_bool
+    ? high_hertz_float
+    : Math.sqrt(
+      grid_frequencies_float64array[point_index_int] *
+      grid_frequencies_float64array[point_index_int + 1]
+    );
+
+  return { lower_hertz_float, upper_hertz_float };
+}
+
+/**
+ * Real-time 3D spectrogram with a Canvas2D fallback.
+ *
+ * Brief:
+ *   Constructing the view attempts WebGL2 and silently degrades to a
+ *   projected Canvas2D waterfall if the context cannot be created, so the
+ *   application remains fully usable where WebGL is blocked.
+ *
+ * Arguments:
+ *   target_canvas (HTMLCanvasElement): Canvas to render into.
+ *   engine_obj (AudioEngine): Source of the analyser spectrum.
+ *
+ * Returns:
+ *   (Waterfall): The constructed view.
+ *
+ * Warning:
+ *   The instance installs pointer listeners on the canvas. Call destroy()
+ *   before discarding it or those listeners outlive the view.
+ */
+export class Waterfall {
+  render_mode_str = 'webgl';
+  is_running_bool = false;
+  camera_obj = { ...DEFAULT_CAMERA_OBJ };
 
   #gl = null;
-  #prog = null;
-  #vao = null;
-  #tex = null;
-  #loc = null;
-  #indexCount = 0;
-  #head = 0;
-  #row = new Uint8Array(FREQ_POINTS);
-  #detach = null;
-  #raf = 0;
-  #lift = 0.95;
-  #lastFrame = 0;
-  #fps = 0;
+  #program_obj = null;
+  #vertex_array_obj = null;
+  #height_texture_obj = null;
+  #locations_obj = null;
+  #index_count_int = 0;
+  #head_row_int = 0;
+  #row_uint8array = new Uint8Array(FREQUENCY_POINT_COUNT_INT);
+  #detach_controls_fn = null;
+  #animation_frame_id_int = 0;
+  #lift_float = DEFAULT_AMPLITUDE_LIFT_FLOAT;
+  #last_frame_ms_float = 0;
+  #frames_per_second_float = 0;
 
-  /**
-   * @param {HTMLCanvasElement} canvas
-   * @param {import('../core/engine.js').AudioEngine} engine
-   */
-  constructor(canvas, engine) {
-    this.canvas = canvas;
-    this.engine = engine;
+  constructor(target_canvas, engine_obj) {
+    this.canvas = target_canvas;
+    this.engine_obj = engine_obj;
 
-    // Display band. The low edge is 5 Hz rather than the conventional 20 Hz
-    // because infrasonic work — candle flicker, thermoacoustic forcing — lives
-    // entirely below the audible floor and has to be visible here. The high
-    // edge follows Nyquist, so raising the sample rate reveals ultrasound.
-    this.loHz = 5;
-    this.hiHz = Math.min(engine.nyquistHertz, 48000);
+    this.low_hertz_float = DISPLAY_LOW_HERTZ_FLOAT;
+    this.high_hertz_float = Math.min(
+      engine_obj.nyquistHertz, DISPLAY_HIGH_HERTZ_FLOAT
+    );
 
-    // Log-spaced frequency grid — the whole point of resampling on the CPU.
-    this.freqs = new Float64Array(FREQ_POINTS);
-    for (let i = 0; i < FREQ_POINTS; i++) {
-      this.freqs[i] = mapPositionToFrequency(i / (FREQ_POINTS - 1), this.loHz, this.hiHz);
+    this.grid_frequencies_float64array = new Float64Array(
+      FREQUENCY_POINT_COUNT_INT
+    );
+    for (let point_index_int = 0;
+      point_index_int < FREQUENCY_POINT_COUNT_INT; point_index_int++) {
+      this.grid_frequencies_float64array[point_index_int] =
+        mapPositionToFrequency(
+          point_index_int / (FREQUENCY_POINT_COUNT_INT - 1),
+          this.low_hertz_float,
+          this.high_hertz_float
+        );
     }
 
     try {
-      this.#initGL();
+      this.#initialiseWebgl();
     } catch (err) {
-      console.warn('[SonicForge] WebGL2 unavailable, falling back to Canvas2D:', err.message);
-      this.mode = 'canvas2d';
-      this.#initCanvas();
+      console.warn(
+        '[SonicForge] WebGL2 unavailable, falling back to Canvas2D:',
+        err.message
+      );
+      this.render_mode_str = 'canvas2d';
+      this.#initialiseCanvas2d();
     }
 
-    this.#detach = orbitControls(canvas, this.camera);
+    this.#detach_controls_fn = attachOrbitControls(
+      target_canvas, this.camera_obj
+    );
   }
 
   /* =================================================================== */
 
-  #initGL() {
-    const gl = getGL(this.canvas);
-    if (!gl) throw new GLError('WebGL2 context could not be created');
+  /**
+   * Create the program, mesh and height texture, and set fixed GL state.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   *
+   * Warning:
+   *   Throws GLError when WebGL2 is unavailable, which the constructor
+   *   catches to select the Canvas2D path.
+   */
+  #initialiseWebgl() {
+    const gl = createWebgl2Context(this.canvas);
+    if (!gl) {
+      throw new GLError('WebGL2 context could not be created');
+    }
     this.#gl = gl;
 
-    this.#prog = link(gl, VERT, FRAG);
-    this.#loc = locations(gl, this.#prog);
+    this.#program_obj = linkShaderProgram(
+      gl, VERTEX_SHADER_SOURCE_STR, FRAGMENT_SHADER_SOURCE_STR
+    );
+    this.#locations_obj = collectProgramLocations(gl, this.#program_obj);
 
-    // --- Static grid mesh ------------------------------------------
-    const verts = new Float32Array(FREQ_POINTS * HISTORY * 2);
-    let p = 0;
-    for (let j = 0; j < HISTORY; j++) {
-      for (let i = 0; i < FREQ_POINTS; i++) {
-        verts[p++] = i / (FREQ_POINTS - 1);
-        verts[p++] = j / (HISTORY - 1);
-      }
-    }
+    const { positions_float32array, indices_uint32array } = buildGridMesh();
+    this.#index_count_int = indices_uint32array.length;
 
-    const quads = (FREQ_POINTS - 1) * (HISTORY - 1);
-    const idx = new Uint32Array(quads * 6);
-    let q = 0;
-    for (let j = 0; j < HISTORY - 1; j++) {
-      for (let i = 0; i < FREQ_POINTS - 1; i++) {
-        const a = j * FREQ_POINTS + i;
-        const b = a + 1;
-        const c = a + FREQ_POINTS;
-        const d = c + 1;
-        idx[q++] = a; idx[q++] = c; idx[q++] = b;
-        idx[q++] = b; idx[q++] = c; idx[q++] = d;
-      }
-    }
-    this.#indexCount = idx.length;
-
-    this.#vao = gl.createVertexArray();
-    gl.bindVertexArray(this.#vao);
-    buffer(gl, gl.ARRAY_BUFFER, verts);
-    gl.enableVertexAttribArray(this.#loc.attribs.aGrid);
-    gl.vertexAttribPointer(this.#loc.attribs.aGrid, 2, gl.FLOAT, false, 0, 0);
-    buffer(gl, gl.ELEMENT_ARRAY_BUFFER, idx);
+    const grid_location_int = this.#locations_obj.attributes_obj.aGrid;
+    this.#vertex_array_obj = gl.createVertexArray();
+    gl.bindVertexArray(this.#vertex_array_obj);
+    createGpuBuffer(gl, gl.ARRAY_BUFFER, positions_float32array);
+    gl.enableVertexAttribArray(grid_location_int);
+    gl.vertexAttribPointer(grid_location_int, 2, gl.FLOAT, false, 0, 0);
+    createGpuBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indices_uint32array);
     gl.bindVertexArray(null);
 
-    this.#tex = heightTexture(gl, FREQ_POINTS, HISTORY);
+    this.#height_texture_obj = createHeightTexture(
+      gl, FREQUENCY_POINT_COUNT_INT, HISTORY_ROW_COUNT_INT
+    );
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -209,174 +392,375 @@ export class Waterfall {
     gl.clearColor(0, 0, 0, 0);
   }
 
-  #initCanvas() {
-    this.ctx2d = this.canvas.getContext('2d');
-    this.history = [];
+  /**
+   * Prepare the Canvas2D fallback surface.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #initialiseCanvas2d() {
+    this.canvas_2d_ctx = this.canvas.getContext('2d');
+    this.history_list = [];
   }
 
   /* =================================================================== */
 
+  /**
+   * Begin the render loop.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (Waterfall): This instance, for chaining.
+   */
   start() {
-    if (this.running) return this;
-    this.running = true;
-    this.#lastFrame = performance.now();
-    const loop = () => {
-      if (!this.running) return;
-      this.#frame();
-      this.#raf = requestAnimationFrame(loop);
+    if (this.is_running_bool) {
+      return this;
+    }
+    this.is_running_bool = true;
+    this.#last_frame_ms_float = performance.now();
+
+    const stepFrame = () => {
+      if (!this.is_running_bool) {
+        return;
+      }
+      // Scheduled before drawing, so a draw that throws cannot silently
+      // end the animation and leave a frozen canvas behind.
+      this.#animation_frame_id_int = requestAnimationFrame(stepFrame);
+      this.#renderFrame();
     };
-    this.#raf = requestAnimationFrame(loop);
+    this.#animation_frame_id_int = requestAnimationFrame(stepFrame);
     return this;
   }
 
+  /**
+   * Halt the render loop without releasing GPU resources.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (Waterfall): This instance, for chaining.
+   */
   stop() {
-    this.running = false;
-    cancelAnimationFrame(this.#raf);
+    this.is_running_bool = false;
+    cancelAnimationFrame(this.#animation_frame_id_int);
     return this;
   }
 
+  /**
+   * Stop rendering, detach listeners and release GPU resources.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
   destroy() {
     this.stop();
-    this.#detach?.();
+    this.#detach_controls_fn?.();
     const gl = this.#gl;
-    if (gl) {
-      gl.deleteTexture(this.#tex);
-      gl.deleteProgram(this.#prog);
-      gl.deleteVertexArray(this.#vao);
+    if (!gl) {
+      return;
     }
+    gl.deleteTexture(this.#height_texture_obj);
+    gl.deleteProgram(this.#program_obj);
+    gl.deleteVertexArray(this.#vertex_array_obj);
   }
 
-  setLift(v) {
-    this.#lift = clampToRange(v, 0.15, 2.2);
+  /**
+   * Set the vertex displacement multiplier.
+   *
+   * Arguments:
+   *   lift_float (number): Requested exaggeration, clamped into range.
+   *
+   * Returns:
+   *   (none)
+   */
+  setAmplitudeLift(lift_float) {
+    this.#lift_float = clampToRange(
+      lift_float, MIN_AMPLITUDE_LIFT_FLOAT, MAX_AMPLITUDE_LIFT_FLOAT
+    );
   }
 
-  get fps() {
-    return this.#fps;
+  /** Smoothed frame rate, in frames per second. */
+  get frames_per_second_float() {
+    return this.#frames_per_second_float;
   }
 
   /* =================================================================== */
 
   /**
    * Resample the analyser's linear bins onto the log grid and quantise.
-   * Peak-picking rather than averaging, because a single sine sitting between
-   * two log grid points must not be allowed to disappear.
+   *
+   * Brief:
+   *   Peak-picking rather than averaging, because a single sine sitting
+   *   between two log grid points must not be allowed to disappear.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
    */
-  #sampleRow() {
-    const spectrum = this.engine.meter.readSpectrumDb();
-    if (!spectrum || !spectrum.length) {
-      this.#row.fill(0);
+  #sampleSpectrumRow() {
+    const spectrum_db_arr = this.engine_obj.meter.readSpectrumDb();
+    if (!spectrum_db_arr || !spectrum_db_arr.length) {
+      this.#row_uint8array.fill(0);
       return;
     }
-    const bins = spectrum.length;
-    const nyquist = this.engine.sampleRateHertz / 2;
-    const span = MAX_DB - MIN_DB;
 
-    for (let i = 0; i < FREQ_POINTS; i++) {
-      const fLo = i === 0 ? this.loHz : Math.sqrt(this.freqs[i - 1] * this.freqs[i]);
-      const fHi = i === FREQ_POINTS - 1 ? this.hiHz : Math.sqrt(this.freqs[i] * this.freqs[i + 1]);
+    const bin_count_int = spectrum_db_arr.length;
+    const nyquist_hertz_float = this.engine_obj.sampleRateHertz / 2;
+    const span_db_float = MAX_DISPLAY_DB_FLOAT - MIN_DISPLAY_DB_FLOAT;
 
-      let b0 = Math.floor((fLo / nyquist) * bins);
-      let b1 = Math.ceil((fHi / nyquist) * bins);
-      b0 = clampToRange(b0, 0, bins - 1);
-      b1 = clampToRange(b1, b0, bins - 1);
+    for (let point_index_int = 0;
+      point_index_int < FREQUENCY_POINT_COUNT_INT; point_index_int++) {
+      const { lower_hertz_float, upper_hertz_float } = computeBandEdges(
+        this.grid_frequencies_float64array,
+        point_index_int,
+        this.low_hertz_float,
+        this.high_hertz_float
+      );
 
-      let peak = -Infinity;
-      for (let b = b0; b <= b1; b++) if (spectrum[b] > peak) peak = spectrum[b];
-      if (!Number.isFinite(peak)) peak = MIN_DB;
+      const first_bin_int = clampToRange(
+        Math.floor((lower_hertz_float / nyquist_hertz_float) * bin_count_int),
+        0,
+        bin_count_int - 1
+      );
+      const last_bin_int = clampToRange(
+        Math.ceil((upper_hertz_float / nyquist_hertz_float) * bin_count_int),
+        first_bin_int,
+        bin_count_int - 1
+      );
 
-      const t = clampToRange((peak - MIN_DB) / span, 0, 1);
-      this.#row[i] = (t * 255) | 0;
+      let peak_db_float = -Infinity;
+      for (let bin_int = first_bin_int; bin_int <= last_bin_int; bin_int++) {
+        if (spectrum_db_arr[bin_int] > peak_db_float) {
+          peak_db_float = spectrum_db_arr[bin_int];
+        }
+      }
+      if (!Number.isFinite(peak_db_float)) {
+        peak_db_float = MIN_DISPLAY_DB_FLOAT;
+      }
+
+      const normalised_float = clampToRange(
+        (peak_db_float - MIN_DISPLAY_DB_FLOAT) / span_db_float, 0, 1
+      );
+      this.#row_uint8array[point_index_int] = (normalised_float * 255) | 0;
     }
   }
 
-  #frame() {
-    const now = performance.now();
-    const dt = now - this.#lastFrame;
-    this.#lastFrame = now;
-    this.#fps = this.#fps * 0.9 + (1000 / Math.max(dt, 1)) * 0.1;
+  /**
+   * Advance the frame-rate estimate, sample a row, and draw.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #renderFrame() {
+    const now_ms_float = performance.now();
+    const elapsed_ms_float = now_ms_float - this.#last_frame_ms_float;
+    this.#last_frame_ms_float = now_ms_float;
+    this.#frames_per_second_float =
+      this.#frames_per_second_float * FPS_SMOOTHING_FLOAT +
+      (1000 / Math.max(elapsed_ms_float, 1)) * (1 - FPS_SMOOTHING_FLOAT);
 
-    this.#sampleRow();
-    if (this.mode === 'webgl') this.#drawGL();
-    else this.#drawCanvas();
+    this.#sampleSpectrumRow();
+    if (this.render_mode_str === 'webgl') {
+      this.#drawWebglSurface();
+    } else {
+      this.#drawCanvas2dSurface();
+    }
   }
 
-  #drawGL() {
+  /**
+   * Compute the combined view-projection matrix for the current camera.
+   *
+   * Arguments:
+   *   aspect_ratio_float (number): Drawing buffer width over height.
+   *
+   * Returns:
+   *   (Float32Array): Column-major 4x4 view-projection matrix.
+   */
+  #computeViewProjection(aspect_ratio_float) {
+    const projection_float32array = Matrix4.createPerspective(
+      FIELD_OF_VIEW_RADIANS_FLOAT,
+      aspect_ratio_float,
+      NEAR_PLANE_FLOAT,
+      FAR_PLANE_FLOAT
+    );
+    const eye_position_arr = Matrix4.computeOrbitEyePosition(
+      ORBIT_CENTRE_TUPLE,
+      this.camera_obj.radius,
+      this.camera_obj.azimuth,
+      this.camera_obj.elevation
+    );
+    const view_float32array = Matrix4.createLookAt(
+      eye_position_arr, LOOK_AT_TARGET_TUPLE, WORLD_UP_TUPLE
+    );
+    return Matrix4.multiply(projection_float32array, view_float32array);
+  }
+
+  /**
+   * Upload the newest spectrum row into the ring-buffer texture.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #uploadNewestRow() {
     const gl = this.#gl;
-    const canvas = this.canvas;
-    resizeToDisplay(canvas);
-    gl.viewport(0, 0, canvas.width, canvas.height);
+    this.#head_row_int = (this.#head_row_int + 1) % HISTORY_ROW_COUNT_INT;
+    gl.bindTexture(gl.TEXTURE_2D, this.#height_texture_obj);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      this.#head_row_int,
+      FREQUENCY_POINT_COUNT_INT,
+      1,
+      gl.RED,
+      gl.UNSIGNED_BYTE,
+      this.#row_uint8array
+    );
+  }
+
+  /**
+   * Draw one frame of the WebGL surface.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawWebglSurface() {
+    const gl = this.#gl;
+    const target_canvas = this.canvas;
+    resizeCanvasToDisplay(target_canvas);
+    gl.viewport(0, 0, target_canvas.width, target_canvas.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Push the newest row into the ring buffer.
-    this.#head = (this.#head + 1) % HISTORY;
-    gl.bindTexture(gl.TEXTURE_2D, this.#tex);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, this.#head, FREQ_POINTS, 1, gl.RED, gl.UNSIGNED_BYTE, this.#row);
+    this.#uploadNewestRow();
 
-    const aspect = canvas.width / Math.max(1, canvas.height);
-    const proj = Matrix4.createPerspective(Math.PI / 4.2, aspect, 0.1, 40);
-    const eye = Matrix4.computeOrbitEyePosition([0, 0.22, 0], this.camera.radius, this.camera.azimuth, this.camera.elevation);
-    const view = Matrix4.createLookAt(eye, [0, 0.16, 0], [0, 1, 0]);
-    const viewProj = Matrix4.multiply(proj, view);
+    const aspect_ratio_float =
+      target_canvas.width / Math.max(1, target_canvas.height);
+    const view_projection_float32array =
+      this.#computeViewProjection(aspect_ratio_float);
+    const uniforms_obj = this.#locations_obj.uniforms_obj;
 
-    gl.useProgram(this.#prog);
-    gl.bindVertexArray(this.#vao);
-    gl.uniformMatrix4fv(this.#loc.uniforms.uViewProj, false, viewProj);
-    gl.uniform1i(this.#loc.uniforms.uHeights, 0);
-    gl.uniform1f(this.#loc.uniforms.uHead, this.#head);
-    gl.uniform1f(this.#loc.uniforms.uRows, HISTORY);
-    gl.uniform1f(this.#loc.uniforms.uLift, this.#lift);
-    gl.uniform1f(this.#loc.uniforms.uWire, 0);
+    gl.useProgram(this.#program_obj);
+    gl.bindVertexArray(this.#vertex_array_obj);
+    gl.uniformMatrix4fv(
+      uniforms_obj.uViewProj, false, view_projection_float32array
+    );
+    gl.uniform1i(uniforms_obj.uHeights, 0);
+    gl.uniform1f(uniforms_obj.uHead, this.#head_row_int);
+    gl.uniform1f(uniforms_obj.uRows, HISTORY_ROW_COUNT_INT);
+    gl.uniform1f(uniforms_obj.uLift, this.#lift_float);
+    gl.uniform1f(uniforms_obj.uWire, 0);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.#tex);
+    gl.bindTexture(gl.TEXTURE_2D, this.#height_texture_obj);
 
-    gl.drawElements(gl.TRIANGLES, this.#indexCount, gl.UNSIGNED_INT, 0);
+    gl.drawElements(
+      gl.TRIANGLES, this.#index_count_int, gl.UNSIGNED_INT, 0
+    );
     gl.bindVertexArray(null);
   }
 
   /**
-   * Canvas2D fallback: a projected waterfall drawn as stacked polylines.
-   * Not as pretty, but it keeps the app fully functional on machines where
-   * WebGL2 is blocked or unavailable.
+   * Draw one history row as a projected polyline.
+   *
+   * Arguments:
+   *   row_uint8array (Uint8Array): Quantised heights for this row.
+   *   row_index_int (number): 0 for the newest row.
+   *
+   * Returns:
+   *   (none)
    */
-  #drawCanvas() {
-    const c = this.ctx2d;
-    const canvas = this.canvas;
-    resizeToDisplay(canvas, 1.5);
-    const w = canvas.width;
-    const h = canvas.height;
+  #strokeCanvasRow(row_uint8array, row_index_int) {
+    const canvas_2d_ctx = this.canvas_2d_ctx;
+    const width_px_int = this.canvas.width;
+    const height_px_int = this.canvas.height;
 
-    this.history.unshift(Uint8Array.from(this.#row));
-    if (this.history.length > 90) this.history.pop();
+    const age_float = row_index_int / CANVAS_HISTORY_ROW_COUNT_INT;
+    const depth_float = 1 - age_float * 0.55;
+    const baseline_y_px_float = height_px_int * (0.30 + age_float * 0.62);
+    const offset_x_px_float = width_px_int * age_float * 0.11;
+    const row_width_px_float = width_px_int * (1 - age_float * 0.22);
 
-    c.clearRect(0, 0, w, h);
-    const rows = this.history.length;
-
-    for (let j = rows - 1; j >= 0; j--) {
-      const row = this.history[j];
-      const age = j / 90;
-      const depth = 1 - age * 0.55;
-      const yBase = h * (0.30 + age * 0.62);
-      const xOff = w * age * 0.11;
-      const width = w * (1 - age * 0.22);
-
-      c.beginPath();
-      for (let i = 0; i < FREQ_POINTS; i++) {
-        const x = xOff + (i / (FREQ_POINTS - 1)) * width;
-        const y = yBase - (row[i] / 255) * h * 0.34 * depth;
-        i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+    canvas_2d_ctx.beginPath();
+    for (let point_index_int = 0;
+      point_index_int < FREQUENCY_POINT_COUNT_INT; point_index_int++) {
+      const x_px_float = offset_x_px_float +
+        (point_index_int / (FREQUENCY_POINT_COUNT_INT - 1)) *
+        row_width_px_float;
+      const y_px_float = baseline_y_px_float -
+        (row_uint8array[point_index_int] / 255) *
+        height_px_int * 0.34 * depth_float;
+      if (point_index_int === 0) {
+        canvas_2d_ctx.moveTo(x_px_float, y_px_float);
+      } else {
+        canvas_2d_ctx.lineTo(x_px_float, y_px_float);
       }
-      const alpha = (1 - age) * 0.85;
-      c.strokeStyle = `rgba(0, ${120 + 120 * (1 - age)}, ${200 + 55 * (1 - age)}, ${alpha})`;
-      c.lineWidth = j === 0 ? 2 : 1;
-      c.stroke();
+    }
 
-      if (j === 0) {
-        c.shadowBlur = 14;
-        c.shadowColor = 'rgba(0,242,254,0.7)';
-        c.stroke();
-        c.shadowBlur = 0;
-      }
+    const green_int = Math.round(120 + 120 * (1 - age_float));
+    const blue_int = Math.round(200 + 55 * (1 - age_float));
+    const alpha_float = (1 - age_float) * 0.85;
+    canvas_2d_ctx.strokeStyle =
+      `rgba(0, ${green_int}, ${blue_int}, ${alpha_float})`;
+    canvas_2d_ctx.lineWidth = row_index_int === 0 ? 2 : 1;
+    canvas_2d_ctx.stroke();
+
+    if (row_index_int === 0) {
+      canvas_2d_ctx.shadowBlur = 14;
+      canvas_2d_ctx.shadowColor = 'rgba(0,242,254,0.7)';
+      canvas_2d_ctx.stroke();
+      canvas_2d_ctx.shadowBlur = 0;
+    }
+  }
+
+  /**
+   * Canvas2D fallback: a projected waterfall drawn as stacked polylines.
+   *
+   * Brief:
+   *   Not as pretty as the GPU path, but it keeps the application fully
+   *   functional on machines where WebGL2 is blocked or unavailable.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawCanvas2dSurface() {
+    const canvas_2d_ctx = this.canvas_2d_ctx;
+    const target_canvas = this.canvas;
+    resizeCanvasToDisplay(target_canvas, CANVAS_MAX_PIXEL_RATIO_FLOAT);
+
+    this.history_list.unshift(Uint8Array.from(this.#row_uint8array));
+    if (this.history_list.length > CANVAS_HISTORY_ROW_COUNT_INT) {
+      this.history_list.pop();
+    }
+
+    canvas_2d_ctx.clearRect(
+      0, 0, target_canvas.width, target_canvas.height
+    );
+    for (let row_index_int = this.history_list.length - 1;
+      row_index_int >= 0; row_index_int--) {
+      this.#strokeCanvasRow(this.history_list[row_index_int], row_index_int);
     }
   }
 }
