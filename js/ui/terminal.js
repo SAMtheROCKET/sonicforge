@@ -446,7 +446,7 @@ export class Terminal {
     }
 
     try {
-      this.vm_obj.run(source_str, { label: 'terminal' });
+      this.vm_obj.run(source_str, { label_str: 'terminal' });
     } catch (err) {
       this.appendLogLine(err.format ? err.format() : err.message, 'err');
     }
@@ -689,29 +689,29 @@ export class Terminal {
    *   (none)
    */
   #renderTracker(snapshot_obj) {
-    if (!snapshot_obj.current) {
+    if (!snapshot_obj.current_obj) {
       this.program_counter_el.textContent =
-        snapshot_obj.state === VM_STATE.DRAINING ? 'draining' : '—';
+        snapshot_obj.state_str === VM_STATE.DRAINING ? 'draining' : '—';
       this.progress_bar_el.style.width = '0%';
       this.countdown_el.textContent = '';
       return;
     }
 
-    const current_obj = snapshot_obj.current;
-    const loop_str = current_obj.iterations > 1
-      ? `  ↻ ${current_obj.iteration}/${current_obj.iterations}`
+    const current_obj = snapshot_obj.current_obj;
+    const loop_str = current_obj.iteration_count_int > 1
+      ? `  ↻ ${current_obj.iteration_int}/${current_obj.iteration_count_int}`
       : '';
-    const depth_str = current_obj.depth > 0
-      ? '│'.repeat(current_obj.depth) + ' '
+    const depth_str = current_obj.depth_int > 0
+      ? '│'.repeat(current_obj.depth_int) + ' '
       : '';
 
     this.program_counter_el.textContent =
-      `${depth_str}${current_obj.label}${loop_str}`;
+      `${depth_str}${current_obj.label_str}${loop_str}`;
     this.progress_bar_el.style.width =
-      `${Math.round(snapshot_obj.progress * 100)}%`;
-    this.countdown_el.textContent = snapshot_obj.remainMs > 0
-      ? `${formatDuration(snapshot_obj.remainMs)} │ ` +
-        `${formatDuration(snapshot_obj.totalMs)}`
-      : formatDuration(snapshot_obj.totalMs);
+      `${Math.round(snapshot_obj.progress_float * 100)}%`;
+    this.countdown_el.textContent = snapshot_obj.remaining_ms_float > 0
+      ? `${formatDuration(snapshot_obj.remaining_ms_float)} │ ` +
+        `${formatDuration(snapshot_obj.total_ms_float)}`
+      : formatDuration(snapshot_obj.total_ms_float);
   }
 }

@@ -216,17 +216,17 @@ export async function runSelfTest(app, { boot }) {
   });
 
   check('script compiles and runs', () => {
-    const before = app.vm.state;
+    const before = app.vm.state_str;
     app.vm.run('play(440hz, 60ms, sine, -30db)\nwait(20ms)', { label: 'selftest' });
-    const running = app.vm.running;
+    const running = app.vm.is_running_bool;
     app.vm.stop();
     return running ? `state moved from ${before}` : false;
   });
 
   check('script rejects an unknown command with a helpful error', () => {
     const v = app.vm.validate('frobnicate(1)');
-    return !v.ok && /Unknown command/.test(v.error.message)
-      ? v.error.message.slice(0, 60)
+    return !v.is_valid_bool && /Unknown command/.test(v.err.message)
+      ? v.err.message.slice(0, 60)
       : false;
   });
 
@@ -243,7 +243,7 @@ export async function runSelfTest(app, { boot }) {
 
   check('am() command exists for infrasonic envelopes', () => {
     const v = app.vm.validate('am(200hz, 11hz, 1s, 100%, -30db)');
-    return v.ok ? 'validated' : v.error.message;
+    return v.is_valid_bool ? 'validated' : v.err.message;
   });
 
   await check('noise generator starts', async () => true) && await (async () => {
@@ -266,7 +266,7 @@ export async function runSelfTest(app, { boot }) {
       if (!p.script && !p.apply) bad.push(p.id);
       if (p.script) {
         const v = app.vm.validate(p.script);
-        if (!v.ok) bad.push(`${p.id}: ${v.error.message}`);
+        if (!v.is_valid_bool) bad.push(`${p.id}: ${v.err.message}`);
       }
     }
     return bad.length === 0 ? `${(app.__presets ?? []).length} presets validated` : bad.join(' | ');

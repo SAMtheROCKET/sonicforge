@@ -2,9 +2,9 @@
  * The SonicForge command set.
  *
  * Every command receives a runtime (`rt`) carrying the application handles and
- * — critically — `rt.when`, the AudioContext timestamp at which this command
+ * — critically — `rt.when_seconds_float`, the AudioContext timestamp at which this command
  * is supposed to take effect. Because the VM schedules ahead of real time, a
- * command must never act "now": audio is scheduled against `rt.when`, and any
+ * command must never act "now": audio is scheduled against `rt.when_seconds_float`, and any
  * side effect that cannot be expressed as an AudioParam event is deferred with
  * `rt.at()` so it lands at the right moment.
  *
@@ -106,10 +106,10 @@ export function makeRuntime(app, vm) {
     vm,
     get engine() { return app.engine; },
     get ctx() { return app.engine.context_obj; },
-    when: 0,
-    line: 0,
-    pc: 0,
-    lastLabel: null,
+    when_seconds_float: 0,
+    line_int: 0,
+    program_counter_int: 0,
+    last_label_str: null,
 
     /** Log a line to the terminal, deferred to the moment it actually happens. */
     log(text, level = 'exec') {
@@ -122,21 +122,21 @@ export function makeRuntime(app, vm) {
     },
 
     /**
-     * Defer a side effect until `rt.when` arrives in wall-clock terms.
+     * Defer a side effect until `rt.when_seconds_float` arrives in wall-clock terms.
      * Anything that is not an AudioParam event must go through this, or the
      * VM's lookahead would make it happen up to 350 ms early.
      */
-    at(fn, when = this.when) {
+    at(fn, when = this.when_seconds_float) {
       const delay = Math.max(0, (when - app.engine.currentTimeSeconds) * 1000);
       if (delay < 2) {
         try { fn(); } catch (e) { console.error('[SonicForge] command error', e); }
         return null;
       }
-      return vm.defer(fn, delay);
+      return vm.deferCall(fn, delay);
     },
 
-    hold: (node, gain) => vm.hold(node, gain),
-    label(text) { this.lastLabel = text; },
+    hold: (node, gain) => vm.holdNode(node, gain),
+    label(text) { this.last_label_str = text; },
   };
 }
 
@@ -148,7 +148,7 @@ export function makeRuntime(app, vm) {
  * Create a one-shot voice with a click-free envelope, routed through the
  * channel bus so it is metered, visualised and limited like everything else.
  */
-function voice(rt, { freq: f, waveform: wf, gainDb: db, pan = 0, phase = 0, durSec, ramp = null, when = rt.when }) {
+function voice(rt, { freq: f, waveform: wf, gainDb: db, pan = 0, phase = 0, durSec, ramp = null, when = rt.when_seconds_float }) {
   const ctx = rt.ctx;
 
   const osc = ctx.createOscillator();
@@ -283,7 +283,7 @@ export const COMMANDS = {
       const db = gainDb(a[4], -8);
 
       for (let i = 0; i < count; i++) {
-        const when = rt.when + (i * (on + off)) / 1000;
+        const when = rt.when_seconds_float + (i * (on + off)) / 1000;
         voice(rt, { freq: f, waveform: 'sine', gainDb: db, durSec: on / 1000, when });
       }
       const total = count * (on + off);
@@ -310,7 +310,7 @@ export const COMMANDS = {
       if (ms <= 0) return 0;
 
       const ctx = rt.ctx;
-      const when = rt.when;
+      const when = rt.when_seconds_float;
       const durSec = ms / 1000;
       const amp = convertDbToLinear(db);
 
@@ -406,7 +406,7 @@ export const COMMANDS = {
           if (/[\s\-.,]/.test(ch)) offset += toneMs + gapMs;  // pause
           continue;
         }
-        const when = rt.when + offset / 1000;
+        const when = rt.when_seconds_float + offset / 1000;
         voice(rt, { freq: DTMF_ROWS[pair[0]], waveform: 'sine', gainDb: db, durSec: toneMs / 1000, when });
         voice(rt, { freq: DTMF_COLS[pair[1]], waveform: 'sine', gainDb: db, durSec: toneMs / 1000, when });
         rt.at(() => rt.app.onDtmfDigit?.(ch), when);
@@ -479,7 +479,7 @@ export const COMMANDS = {
         await rt.app.noise.start();
       });
 
-      if (ms > 0) rt.at(() => rt.app.noise.stop(), rt.when + ms / 1000);
+      if (ms > 0) rt.at(() => rt.app.noise.stop(), rt.when_seconds_float + ms / 1000);
 
       rt.label(`noise ${valid}`);
       rt.log(`░ noise ${valid} @ ${db.toFixed(1)} dBFS${ms > 0 ? ` for ${formatDuration(ms)}` : ''}`);
@@ -582,7 +582,7 @@ export const COMMANDS = {
       rt.at(() => {
         rt.app.rack.stopAllChannels();
         rt.app.noise.stop();
-        rt.vm.releaseHeld();
+        rt.vm.releaseHeldNodes();
         rt.app.syncUi?.();
       });
       rt.label('stop all');

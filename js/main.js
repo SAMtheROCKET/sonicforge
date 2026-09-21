@@ -223,7 +223,7 @@ function buildHeader() {
   const label = $('master-play-label');
 
   play.addEventListener('click', () => {
-    const anyLive = app.rack.activeChannelCount > 0 || app.noise.is_running_bool || app.vm.running;
+    const anyLive = app.rack.activeChannelCount > 0 || app.noise.is_running_bool || app.vm.is_running_bool;
     if (anyLive) {
       app.rack.stopAllChannels();
       app.noise.stop();
@@ -356,7 +356,7 @@ function syncVisualiserHint() {
 }
 
 function syncHeader() {
-  const live = app.rack.activeChannelCount > 0 || app.noise.is_running_bool || app.vm.running;
+  const live = app.rack.activeChannelCount > 0 || app.noise.is_running_bool || app.vm.is_running_bool;
   syncVisualiserHint();
   const play = $('master-play');
   play.classList.toggle('is-playing', live);

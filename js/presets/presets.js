@@ -30,7 +30,7 @@ export const GROUPS = Object.freeze([
 
 /** Silence everything, then return a clean rack for the preset to configure. */
 async function clean(app) {
-  app.vm.stop({ silent: true });
+  app.vm.stop({ is_silent_bool: true });
   app.rack.stopAllChannels();
   app.noise.stop();
   await Promise.resolve();
