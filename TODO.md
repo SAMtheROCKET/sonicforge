@@ -98,7 +98,27 @@ function, <=100 LOC entry point, <=79 char lines. Applies to **every** language 
 - [ ] P12.7 `js/sync/` + `js/presets/`
 - [ ] P12.8 Split `main.js` into wiring modules so the entry point is <=100 LOC
 - [ ] P12.9 Python (`serve.py`, `lint_style.py`), CSS and HTML to the same rules
-- [x] P12.10 Re-run lint to zero + re-run both suites to prove nothing regressed
+- [ ] P12.10 Re-run lint to zero + re-run both suites to prove nothing regressed
+      (suites are green at 111 + 53; lint still reports 1042 in the unconverted layers)
+
+---
+
+## P13 — Ship
+
+- [x] P13.1 Public repo at `github.com/SAMtheROCKET/sonicforge`
+- [x] P13.2 GitHub Pages live at `samtherocket.github.io/sonicforge/`
+- [x] P13.3 All 61 deployed files verified byte-identical to the commit
+- [x] P13.4 Repo description, homepage and 12 topics set
+- [x] P13.5 Brand marks — logo, square mark, PWA icon, 512px raster
+- [x] P13.6 Captures — demo.gif, interference.gif, screenshot.png, ph-gallery.png
+- [x] P13.7 README rewritten around the visuals and why the tool exists
+- [x] P13.8 Launch kit updated with the asset inventory
+- [x] P13.9 Social card made absolute; manifest icon set corrected
+- [ ] P13.10 Scan the Concert Mode QR with a real phone (cannot be done headlessly)
+- [ ] P13.11 Confirm the service worker offline-serves on HTTPS (needs the live site)
+- [ ] P13.12 Record the water-eject clip and the 45-second demo video
+- [ ] P13.13 Optional: enable the CI workflow from `ci/` (needs `workflow` token scope)
+- [ ] P13.14 Vercel deploy as the second target
 
 ---
 
@@ -111,5 +131,5 @@ function, <=100 LOC entry point, <=79 char lines. Applies to **every** language 
 | Q4 | Testing depth | **Unit harness + live Chrome** |
 | Q5 | Mic privacy copy — never uploaded, never stored, stream released on completion | implemented, awaiting confirmation |
 | Q6 | Water-eject safety interlock (confirm dialog + −6 dBFS cap) | implemented on by default |
-| Q7 | GitHub repo name (affects Pages base path; all paths are relative so either works) | pending |
+| Q7 | GitHub repo name (affects Pages base path; all paths are relative so either works) | **sonicforge** |
 | Q8 | Flame rig: candle only, or butane burner / Rubens tube too? Changes which presets lead. | pending |
