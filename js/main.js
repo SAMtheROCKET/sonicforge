@@ -338,8 +338,21 @@ function updateNyquistBadge() {
   badge.className = `badge ${nyq > 24000 ? 'badge--violet' : ''}`;
 }
 
+function syncVisualiserHint() {
+  const hint = $('viz-empty');
+  if (!hint) {
+    return;
+  }
+  // Driven by state changes rather than only by the frame loop, so the hint
+  // never lingers over a live waveform waiting for the next slow tick.
+  const isSilent = app.rack.activeChannelCount === 0 &&
+    !app.noise.is_running_bool;
+  hint.style.opacity = isSilent ? '1' : '0';
+}
+
 function syncHeader() {
   const live = app.rack.activeChannelCount > 0 || app.noise.is_running_bool || app.vm.running;
+  syncVisualiserHint();
   const play = $('master-play');
   play.classList.toggle('is-playing', live);
   play.setAttribute('aria-pressed', String(live));
@@ -718,6 +731,7 @@ function setVizMode(mode) {
     : mode === 'gonio'
       ? 'Vertical = mono · horizontal = out of phase'
       : 'Cyan = left sum · violet = right sum · red dots = nulls';
+  syncVisualiserHint();
   $('viz-badge').textContent = showWaterfall
     ? (wf.mode === 'webgl' ? 'WebGL2' : 'Canvas2D')
     : mode === 'gonio' ? 'Goniometer' : 'Interference';
@@ -869,7 +883,6 @@ function startFrameLoop() {
   const stGr = $('st-gr');
   const stFps = $('st-fps');
   const vizHud = $('viz-hud');
-  const vizEmpty = $('viz-empty');
 
   $('st-rate').textContent = `${(app.engine.sampleRateHertz / 1000).toFixed(1)} kHz`;
   $('st-latency').textContent = `${app.engine.latencyMs.toFixed(1)} ms`;
@@ -923,8 +936,7 @@ function startFrameLoop() {
           (s.voices > 1 ? `<span>SUM <b>${(s.cancellation * 100).toFixed(0)}%</b></span>` : '');
       }
 
-      const silent = app.rack.activeChannelCount === 0 && !app.noise.is_running_bool;
-      vizEmpty.style.opacity = silent ? '1' : '0';
+      syncVisualiserHint();
     }
 
     requestAnimationFrame(frame);

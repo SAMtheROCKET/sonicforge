@@ -424,6 +424,22 @@ export async function runSelfTest(app, { boot }) {
     );
   });
 
+  check('the visualiser hint hides while audio is playing', () => {
+    const channel_obj = app.rack.getChannel(0);
+    channel_obj.start();
+    app.syncUi();
+
+    const hint_el = document.getElementById('viz-empty');
+    const opacity_str = hint_el?.style.opacity ?? '';
+    channel_obj.stop();
+    app.syncUi();
+
+    return verdict(
+      opacity_str === '0',
+      `opacity was "${opacity_str}" with a channel running`
+    );
+  });
+
   // --- report ----------------------------------------------------------
   const failed = checks.filter((c) => !c.ok);
   const report = {
