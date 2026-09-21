@@ -12,7 +12,7 @@
  */
 
 self.__SONICFORGE_PRECACHE = {
-  version: '8343acbe649e',
+  version: '76208fb79aa0',
   files: [
     './assets/icon.svg',
     './assets/logo-mark.svg',
@@ -66,6 +66,12 @@ self.__SONICFORGE_PRECACHE = {
     './js/script/runtime.js',
     './js/script/vm.js',
     './js/script/voice.js',
+    './js/selftest/behaviour-checks.js',
+    './js/selftest/engine-checks.js',
+    './js/selftest/harness.js',
+    './js/selftest/layout-checks.js',
+    './js/selftest/output-checks.js',
+    './js/selftest/render-checks.js',
     './js/sync/concert.js',
     './js/sync/signal-codec.js',
     './js/sync/transport.js',

@@ -26,12 +26,12 @@ const SELF_TEST_PARAM_STR = 'selftest';
 
 /* ------------------------------------------------------------------------ */
 
-const app = createApp();
+const app_obj = createApp();
 
 // Exposed for the test harness and for power users in the console.
-window.SonicForge = app;
+window.SonicForge = app_obj;
 
-armBootGesture(app);
+armBootGesture(app_obj);
 
 /**
  * Load and run the headless self-test, if this build is allowed to.
@@ -58,10 +58,10 @@ function startSelfTestIfRequested() {
     return;
   }
 
-  app.__presets = PRESETS;
+  app_obj.__presets = PRESETS;
   import('./selftest.js')
     .then(({ runSelfTest }) =>
-      runSelfTest(app, { boot: () => bootApplication(app) })
+      runSelfTest(app_obj, { boot: () => bootApplication(app_obj) })
     )
     .catch((err) =>
       console.error('[SonicForge] self-test failed to load', err)
