@@ -8,13 +8,23 @@
   "orientation": "any",
   "background_color": "#0B0F19",
   "theme_color": "#0B0F19",
-  "categories": ["utilities", "music", "productivity"],
+  "categories": [
+    "utilities",
+    "music",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "./assets/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "shortcuts": [
