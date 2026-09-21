@@ -6,6 +6,31 @@ share a 3D spectrogram and a phone that spits water out of its speaker.
 
 ---
 
+## What is already in `assets/`
+
+These are built and committed. Everything below that is marked **to record** is
+the part that needs a camera and a real speaker.
+
+| File | Size | Use |
+|---|---|---|
+| `logo.svg` | 560x140 | Horizontal lockup. README header, press kit, site footer. |
+| `logo-mark.svg` | 140x140 | Square mark alone. Avatars, favicons, app tiles. |
+| `icon.svg` / `icon-512.png` | 512x512 | PWA icon, Product Hunt thumbnail, social avatar. |
+| `og.png` | 1200x630 | Open Graph / Twitter card. Already wired into `index.html`. |
+| `screenshot.png` | 1720x940 | Full interface, 3D view active. Gallery slot 3. |
+| `ph-gallery.png` | 1270x760 | Product Hunt gallery frame, correct aspect. |
+| `demo.gif` | 960x524, 1.9 MB | Interface in motion. README hero. |
+| `interference.gif` | 820x686, 1.4 MB | 440 Hz vs 444 Hz, stereo legs separating, nulls marked. Gallery slot 4. |
+
+The Product Hunt gallery accepts 1270x760. `ph-gallery.png` is already at that
+size; the other stills need to be padded or re-shot to match before upload.
+
+**Still to record:** the water-eject clip (slot 2) and the 45-second video.
+Both need a phone, water and a camera, so they cannot be generated from the
+build.
+
+---
+
 ## The two hero assets
 
 Everything else is supporting material. Get these two right.
@@ -88,7 +113,7 @@ Alternatives:
 > - No backend, no analytics, no account. The microphone opens only during a
 >   calibration measurement and is released in a `finally` block.
 >
-> There are 159 assertions, and nothing is mocked — the noise tests measure
+> There are 111 assertions plus a 53-check application self-test, and nothing is mocked — the noise tests measure
 > the real spectrum of a generated buffer, and the integration tests render
 > audio through `OfflineAudioContext` and check the samples. Pink noise
 > measures −3.05 dB/octave against a nominal −3.
@@ -168,7 +193,7 @@ Tailor per subreddit; a single cross-post reads as spam.
 - [ ] Deploy and confirm the live URL loads
 - [ ] Open the live URL on a phone — check the responsive layout
 - [ ] Confirm the OG card renders (paste the link into Slack or Twitter)
-- [ ] Run `tests.html` on the deployed URL — 159 green
+- [ ] Run `tests.html` on the deployed URL — 111 green
 - [ ] Go offline and reload — the service worker should serve the app
 - [ ] Record both hero assets
 - [ ] Set the repo description and topics
@@ -192,6 +217,6 @@ The credible differentiators, in order of how much anyone cares:
 2. **It does something for you.** Water eject, burn-in, room calibration.
 3. **It is honest about privacy.** No upload, no account, works offline.
 4. **It is serious underneath.** Real phase control, measured noise slopes,
-   latency-corrected calibration, 159 assertions.
+   latency-corrected calibration, 164 assertions across two suites.
 
 Lead with 1 and 2. Keep 3 and 4 for the people who ask — and some will.
