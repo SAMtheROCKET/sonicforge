@@ -76,7 +76,7 @@ const app = {
   booted: false,
 
   log(text, level = 'dim') {
-    this.ui.terminal?.log(text, level);
+    this.ui.terminal?.appendLogLine(text, level);
   },
 
   runScript(source, opts) {
@@ -746,11 +746,11 @@ function setVizMode(mode) {
 function buildTerminal() {
   app.ui.terminal = new Terminal(document.querySelector('[data-term="root"]'), app.vm);
 
-  $('term-clear').addEventListener('click', () => app.ui.terminal.clear());
+  $('term-clear').addEventListener('click', () => app.ui.terminal.clearLog());
   $('term-stop').addEventListener('click', () => { app.vm.stop(); syncHeader(); });
   $('term-multiline').addEventListener('click', (e) => {
-    const on = !app.ui.terminal.multiline;
-    app.ui.terminal.setMultiline(on);
+    const on = !app.ui.terminal.is_multiline_bool;
+    app.ui.terminal.setMultilineMode(on);
     e.target.classList.toggle('is-active', on);
   });
 
@@ -972,7 +972,7 @@ function bindShortcuts() {
 
       case '/':
         e.preventDefault();
-        app.ui.terminal.input.focus();
+        app.ui.terminal.input_el.focus();
         break;
 
       case 'm':
