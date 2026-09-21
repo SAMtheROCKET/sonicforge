@@ -38,11 +38,11 @@ import { FrequencyDial } from './ui/dial.js';
 import { ChannelRackUI, paintRange, paintBipolar } from './ui/channels.js';
 import { Terminal } from './ui/terminal.js';
 import { CalibrationPanel, ConcertPanel } from './ui/panels.js';
-import { toast, confirmDialog } from './ui/feedback.js';
+import { showToast, requestConfirmation } from './ui/feedback.js';
 
 import { ConcertMode } from './sync/concert.js';
 import { PRESETS, GROUPS, runPreset } from './presets/presets.js';
-import { icon } from './ui/icons.js';
+import { renderIconSvg } from './ui/icons.js';
 import { registerServiceWorker } from './pwa.js';
 
 import {
@@ -80,7 +80,7 @@ const app = {
       this.vm.run(source, opts);
     } catch (err) {
       this.log(err.format ? err.format() : err.message, 'err');
-      toast('Script error — see the terminal.', 'err');
+      showToast('Script error — see the terminal.', 'err');
     }
   },
 
@@ -301,9 +301,9 @@ function buildHeader() {
     const wanted = Number(rateSel.value);
     if (wanted === app.engine.sampleRateHertz) return;
 
-    const ok = await confirmDialog({
-      title: `Switch to ${(wanted / 1000).toFixed(1)} kHz?`,
-      body:
+    const ok = await requestConfirmation({
+      title_str: `Switch to ${(wanted / 1000).toFixed(1)} kHz?`,
+      body_html_str:
         'An AudioContext’s sample rate is fixed once it is created, so SonicForge has to reload ' +
         `to change it.<br><br>At ${(wanted / 1000).toFixed(1)} kHz the highest synthesisable frequency ` +
         `becomes <b>${(wanted / 2000).toFixed(1)} kHz</b>. Your channels and calibration curve are preserved.` +
@@ -311,7 +311,7 @@ function buildHeader() {
           ? '<br><br>Note that most speakers produce nothing above ~22 kHz regardless of sample rate — ' +
             'ultrasonic output needs a piezo tweeter.'
           : ''),
-      confirm: 'Reload',
+      confirm_label_str: 'Reload',
     });
 
     if (!ok) { rateSel.value = String(app.engine.sampleRateHertz); return; }
@@ -320,12 +320,12 @@ function buildHeader() {
     location.reload();
   });
 
-  app.engine.on('warn', (m) => toast(m, 'warn', 6000));
+  app.engine.on('warn', (m) => showToast(m, 'warn', 6000));
 
   $('limiter').addEventListener('change', (e) => {
     app.engine.isLimiterEnabled = e.target.checked;
     if (!e.target.checked) {
-      toast('Limiter bypassed — the output path is now provably linear, and clipping is possible.', 'warn', 6000);
+      showToast('Limiter bypassed — the output path is now provably linear, and clipping is possible.', 'warn', 6000);
     }
   });
 }
@@ -368,7 +368,7 @@ function panic() {
   // Restore the master gain a beat later so the app is usable again.
   setTimeout(() => { app.engine.masterLevelDb = app.engine.masterLevelDb; }, 120);
   syncHeader();
-  toast('Panic — everything silenced.', 'warn', 2200);
+  showToast('Panic — everything silenced.', 'warn', 2200);
   app.log('PANIC: all sources stopped.', 'warn');
 }
 
@@ -388,9 +388,9 @@ function buildOscillator() {
   // --- dial -----------------------------------------------------------
   app.ui.dial = new FrequencyDial($('dial'), {
     tuning_obj: TUNING_OBJ,
-    maxHz: app.engine.maxFrequencyHertz,
-    onChange: (hz) => {
-      app.selectedChannel?.setFrequencyHertz(hz);
+    max_hertz_float: app.engine.maxFrequencyHertz,
+    on_change_fn: (frequency_hertz_float) => {
+      app.selectedChannel?.setFrequencyHertz(frequency_hertz_float);
       syncOscillatorPanel();
     },
   });
@@ -415,7 +415,7 @@ function buildOscillator() {
     }
     const ch = app.selectedChannel;
     ch?.setFrequencyHertz(clampToRange(hz, 0.05, app.engine.maxFrequencyHertz));
-    app.ui.dial.set(ch.frequency_hertz_float, { silent: true });
+    app.ui.dial.setFrequencyHertz(ch.frequency_hertz_float, { is_silent_bool: true });
     syncOscillatorPanel();
   };
   freqInput.addEventListener('keydown', (e) => {
@@ -431,7 +431,7 @@ function buildOscillator() {
       const ch = app.selectedChannel;
       if (!ch) return;
       ch.setFrequencyHertz(TUNING_OBJ.transposeBySemitones(ch.frequency_hertz_float, Number(btn.dataset.freqStep)));
-      app.ui.dial.set(ch.frequency_hertz_float, { silent: true });
+      app.ui.dial.setFrequencyHertz(ch.frequency_hertz_float, { is_silent_bool: true });
       syncOscillatorPanel();
     });
   }
@@ -440,13 +440,13 @@ function buildOscillator() {
     const ch = app.selectedChannel;
     if (!ch) return;
     ch.setFrequencyHertz(TUNING_OBJ.snapToNearestSemitone(ch.frequency_hertz_float));
-    app.ui.dial.set(ch.frequency_hertz_float, { silent: true });
+    app.ui.dial.setFrequencyHertz(ch.frequency_hertz_float, { is_silent_bool: true });
     syncOscillatorPanel();
   });
 
   $('btn-add-tone').addEventListener('click', () => {
     const free = app.rack.findFirstIdleChannel();
-    if (!free) return toast('All 16 channels are already running.', 'warn');
+    if (!free) return showToast('All 16 channels are already running.', 'warn');
     const src = app.selectedChannel;
     free.setWaveformName(src?.waveform ?? 'sine');
     free.setFrequencyHertz(src ? src.frequency_hertz_float * 1.5 : 440); // a perfect fifth above
@@ -538,7 +538,7 @@ function syncOscillatorPanel() {
   $('ch-phase-val').textContent = `${ch.phase_degrees_int}°`;
   paintRange(chPhase);
 
-  app.ui.dial?.set(ch.frequency_hertz_float, { silent: true });
+  app.ui.dial?.setFrequencyHertz(ch.frequency_hertz_float, { is_silent_bool: true });
 }
 
 /* -------------------------------------------------------------- channels */
@@ -556,11 +556,11 @@ function buildChannels() {
   $('chan-all-on').addEventListener('click', () => { app.rack.startAllChannels(); syncHeader(); });
   $('chan-all-off').addEventListener('click', () => { app.rack.stopAllChannels(); syncHeader(); });
   $('chan-reset').addEventListener('click', async () => {
-    const ok = await confirmDialog({
-      title: 'Reset all channels?',
-      body: 'Every channel returns to 440 Hz, sine, −18 dBFS, centred, 0°. This cannot be undone.',
-      confirm: 'Reset',
-      danger: true,
+    const ok = await requestConfirmation({
+      title_str: 'Reset all channels?',
+      body_html_str: 'Every channel returns to 440 Hz, sine, −18 dBFS, centred, 0°. This cannot be undone.',
+      confirm_label_str: 'Reset',
+      is_danger_bool: true,
     });
     if (!ok) return;
     app.rack.resetAllChannels();
@@ -633,7 +633,7 @@ function buildNoiseBuffer() {
     try {
       await app.noise.toggle();
     } catch (err) {
-      toast(`Noise failed: ${err.message}`, 'err');
+      showToast(`Noise failed: ${err.message}`, 'err');
     } finally {
       toggle.disabled = false;
       syncNoisePanel();
@@ -775,7 +775,7 @@ function buildPresets() {
       btn.className = `preset preset--${preset.tone ?? 'cyan'}`;
       btn.dataset.preset = preset.id;
       btn.innerHTML = `
-        <span class="preset__glyph">${icon(preset.icon, { size: 13 })}</span>
+        <span class="preset__glyph">${renderIconSvg(preset.icon, { size_px_int: 13 })}</span>
         <span class="preset__text">
           <span class="preset__name"></span>
           <span class="preset__desc"></span>
@@ -803,11 +803,11 @@ async function launchPreset(preset, btn) {
   // Safety interlock: presets that drive hardware hard must be acknowledged,
   // and the master level is capped for the duration.
   if (preset.safety) {
-    const ok = await confirmDialog({
-      title: preset.safety.title,
-      body: preset.safety.body,
-      confirm: preset.safety.confirm,
-      danger: true,
+    const ok = await requestConfirmation({
+      title_str: preset.safety.title,
+      body_html_str: preset.safety.body,
+      confirm_label_str: preset.safety.confirm,
+      is_danger_bool: true,
     });
     if (!ok) return;
 
@@ -827,7 +827,7 @@ async function launchPreset(preset, btn) {
     await runPreset(app, preset);
     app.log(`Preset: ${preset.name}`, 'ok');
   } catch (err) {
-    toast(`Preset failed: ${err.message}`, 'err');
+    showToast(`Preset failed: ${err.message}`, 'err');
     btn.classList.remove('is-running');
   }
   app.syncUi();
@@ -851,7 +851,7 @@ function openDtmfPad() {
     <div class="panel__head">
       <span class="panel__title">DTMF Keypad</span>
       <span class="panel__spacer"></span>
-      <button class="iconbtn" data-close aria-label="Close">${icon('x', { size: 13 })}</button>
+      <button class="iconbtn" data-close aria-label="Close">${renderIconSvg('x', { size_px_int: 13 })}</button>
     </div>
     <div class="panel__body panel__body--tight">
       <div class="dtmf-pad">
@@ -1019,9 +1019,9 @@ function bindRailToggle() {
 }
 
 function showHelp() {
-  confirmDialog({
-    title: 'SonicForge',
-    body: `
+  requestConfirmation({
+    title_str: 'SonicForge',
+    body_html_str: `
       <p style="margin-bottom:12px">Sixteen independent tone channels, seven noise colours, microphone room
       calibration, a scripting terminal and a WebGL spectrogram. Everything runs locally.</p>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse">
@@ -1036,8 +1036,8 @@ function showHelp() {
       </table>
       <p style="margin-top:12px;opacity:.75">On the dial: <b>Shift</b> for fine, <b>Alt</b> for coarse,
       <b>Ctrl</b> to snap to semitones. In the terminal, <b>Tab</b> completes and <b>↑</b> recalls history.</p>`,
-    confirm: 'Close',
-    cancel: 'Dismiss',
+    confirm_label_str: 'Close',
+    cancel_label_str: 'Dismiss',
   });
 }
 
@@ -1105,7 +1105,7 @@ function restoreSession() {
 // Offline support. Skipped on localhost so the dev server is never shadowed
 // by a cache-first worker.
 registerServiceWorker(() => {
-  toast('A new version of SonicForge is ready — reload to update.', 'ok', 0);
+  showToast('A new version of SonicForge is ready — reload to update.', 'ok', 0);
 });
 
 window.addEventListener('beforeunload', persist);

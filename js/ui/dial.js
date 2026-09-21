@@ -1,263 +1,654 @@
 /**
  * Infinite rotational frequency dial.
  *
- * Two properties matter here and most web dials get both wrong:
+ * Brief:
+ *   Two properties matter here, and most web dials get both wrong.
  *
- *   1. It is INFINITE. There is no start or end stop — the knob accumulates
- *      angle forever, because frequency is a ratio scale and a bounded 270°
- *      sweep either gives you 1 Hz resolution at the top or none at the bottom.
+ *   It is infinite. There is no start or end stop; the knob accumulates
+ *   angle forever, because frequency is a ratio scale and a bounded
+ *   270-degree sweep gives you either 1 Hz resolution at the top or none at
+ *   the bottom.
  *
- *   2. It is LOGARITHMIC. A fixed angular movement always changes the pitch by
- *      the same musical interval, so dragging from 100 Hz to 200 Hz takes
- *      exactly as much wrist as 5 kHz to 10 kHz. Anything else feels broken to
- *      anyone with ears.
+ *   It is logarithmic. A fixed angular movement always changes the pitch by
+ *   the same musical interval, so dragging from 100 Hz to 200 Hz takes
+ *   exactly as much wrist as 5 kHz to 10 kHz. Anything else feels broken to
+ *   anyone with ears.
  *
- * Modifiers: Shift = fine (⅛ speed), Alt = coarse (4×), Ctrl/Cmd = snap to
- * the nearest chromatic step of the current A4 reference.
+ *   Modifiers: Shift is fine, Alt is coarse, Ctrl or Cmd snaps to the
+ *   nearest chromatic step of the current A4 reference.
  */
 
 import { TAU_FLOAT, clampToRange } from '../util/numeric.js';
 
-const DEG_PER_OCTAVE = 150;
+/* ---------------------------------------------------------------------------
+ * Constants
+ * ------------------------------------------------------------------------ */
+
+/** Rotation required to travel one octave, in degrees. */
+const DEGREES_PER_OCTAVE_FLOAT = 150;
 
 /**
- * 0.05 Hz is one cycle every twenty seconds — well into the range used for
- * candle-flicker and thermoacoustic work, where the interesting rates are
+ * Lowest frequency the dial will reach, in hertz.
+ *
+ * 0.05 Hz is one cycle every twenty seconds, well into the range used for
+ * candle-flicker and thermoacoustic work where the interesting rates are
  * below anything a person can hear.
  */
-const MIN_HZ = 0.05;
+const MIN_FREQUENCY_HERTZ_FLOAT = 0.05;
 
+/** Starting value and the value the Home key returns to, in hertz. */
+const DEFAULT_FREQUENCY_HERTZ_FLOAT = 440;
+
+/** Upper bound used when the caller does not supply one, in hertz. */
+const DEFAULT_MAX_HERTZ_FLOAT = 22000;
+
+/** Drag and wheel multipliers for the fine and coarse modifiers. */
+const FINE_SENSITIVITY_FLOAT = 0.125;
+const COARSE_SENSITIVITY_FLOAT = 4;
+
+/** Rotation applied by one wheel notch, in degrees. */
+const WHEEL_DEGREES_PER_NOTCH_FLOAT = 6;
+
+/** Frequency ratio of one equal-tempered semitone. */
+const SEMITONE_RATIO_FLOAT = 2 ** (1 / 12);
+
+/** Per-frame decay of the momentum trail and the interaction glow. */
+const SPIN_DECAY_FLOAT = 0.86;
+const GLOW_DECAY_FLOAT = 0.94;
+
+/** Upper bound on the device pixel ratio honoured when resizing. */
+const MAX_PIXEL_RATIO_FLOAT = 2;
+
+/** Tick marks around the rim, and how often one is drawn as a major. */
+const TICK_COUNT_INT = 72;
+const MAJOR_TICK_EVERY_INT = 6;
+
+/** Momentum smear thresholds. */
+const MIN_SMEAR_SPIN_DEGREES_FLOAT = 0.15;
+const SMEAR_SPIN_SCALE_FLOAT = 26;
+const MAX_SMEAR_ALPHA_FLOAT = 0.7;
+
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Infinite logarithmic frequency dial with keyboard and wheel support.
+ *
+ * Brief:
+ *   Owns its own canvas and render loop. The value is authoritative here;
+ *   the caller is notified through on_change_fn and is expected to push the
+ *   value back with setFrequencyHertz when it changes elsewhere.
+ *
+ * Arguments:
+ *   container_el (HTMLElement): The .dial container.
+ *   options_obj (Object): { on_change_fn, tuning_obj, max_hertz_float }.
+ *
+ * Returns:
+ *   (FrequencyDial): The constructed dial.
+ *
+ * Warning:
+ *   The render loop runs until destroy() is called.
+ */
 export class FrequencyDial {
-  value = 440;
-  maxHz = 22000;
-  #angle = 0;
-  #dragging = false;
-  #lastAngle = 0;
-  #raf = 0;
-  #spin = 0;
-  #glow = 0;
+  frequency_hertz_float = DEFAULT_FREQUENCY_HERTZ_FLOAT;
+  max_hertz_float = DEFAULT_MAX_HERTZ_FLOAT;
 
-  /**
-   * @param {HTMLElement} el      the .dial container
-   * @param {{onChange:(hz:number)=>void, tuning_obj:import('../core/tuning.js').Tuning}} opts
-   */
-  constructor(el, { onChange, tuning_obj, maxHz = 22000 }) {
-    this.el = el;
-    this.onChange = onChange;
+  #angle_degrees_float = 0;
+  #is_dragging_bool = false;
+  #last_angle_radians_float = 0;
+  #animation_frame_id_int = 0;
+  #spin_degrees_float = 0;
+  #glow_float = 0;
+
+  constructor(container_el, options_obj) {
+    const {
+      on_change_fn,
+      tuning_obj,
+      max_hertz_float = DEFAULT_MAX_HERTZ_FLOAT,
+    } = options_obj;
+
+    this.container_el = container_el;
+    this.on_change_fn = on_change_fn;
     this.tuning_obj = tuning_obj;
-    this.maxHz = maxHz;
+    this.max_hertz_float = max_hertz_float;
 
-    this.canvas = el.querySelector('canvas') ?? document.createElement('canvas');
-    if (!this.canvas.parentElement) el.prepend(this.canvas);
-    this.ctx = this.canvas.getContext('2d');
+    this.canvas = container_el.querySelector('canvas') ??
+      document.createElement('canvas');
+    if (!this.canvas.parentElement) {
+      container_el.prepend(this.canvas);
+    }
+    this.canvas_ctx = this.canvas.getContext('2d');
 
-    this.#bind();
-    this.#loop();
+    this.#bindInteractions();
+    this.#startRenderLoop();
   }
 
-  set(hz, { silent = false } = {}) {
-    const next = clampToRange(Number(hz) || MIN_HZ, MIN_HZ, this.maxHz);
-    if (next === this.value) return this;
-    this.value = next;
-    if (!silent) this.onChange?.(this.value);
+  /**
+   * Set the displayed frequency.
+   *
+   * Arguments:
+   *   frequency_hertz_float (number): Requested value, clamped into range.
+   *   options_obj (Object): { is_silent_bool } to suppress the callback.
+   *
+   * Returns:
+   *   (FrequencyDial): This instance, for chaining.
+   *
+   * Warning:
+   *   Pass is_silent_bool when echoing a value that came from the owning
+   *   channel, or the callback will write it straight back and loop.
+   */
+  setFrequencyHertz(frequency_hertz_float, options_obj = {}) {
+    const { is_silent_bool = false } = options_obj;
+    const next_hertz_float = clampToRange(
+      Number(frequency_hertz_float) || MIN_FREQUENCY_HERTZ_FLOAT,
+      MIN_FREQUENCY_HERTZ_FLOAT,
+      this.max_hertz_float
+    );
+    if (next_hertz_float === this.frequency_hertz_float) {
+      return this;
+    }
+    this.frequency_hertz_float = next_hertz_float;
+    if (!is_silent_bool) {
+      this.on_change_fn?.(this.frequency_hertz_float);
+    }
     return this;
   }
 
+  /**
+   * Stop the render loop.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  destroy() {
+    cancelAnimationFrame(this.#animation_frame_id_int);
+  }
+
   /* =================================================================== */
 
-  #centre() {
-    const r = this.el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 };
+  /**
+   * Measure the dial's centre in viewport coordinates.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (Object): { x_px_float, y_px_float, radius_px_float }.
+   */
+  #measureCentre() {
+    const bounds_obj = this.container_el.getBoundingClientRect();
+    return {
+      x_px_float: bounds_obj.left + bounds_obj.width / 2,
+      y_px_float: bounds_obj.top + bounds_obj.height / 2,
+      radius_px_float: bounds_obj.width / 2,
+    };
   }
 
-  #angleAt(e) {
-    const c = this.#centre();
-    return Math.atan2(e.clientY - c.y, e.clientX - c.x);
+  /**
+   * Measure the angle from the dial centre to a pointer.
+   *
+   * Arguments:
+   *   pointer_event (PointerEvent): Event carrying client coordinates.
+   *
+   * Returns:
+   *   (number): Angle in radians, in the range returned by atan2.
+   */
+  #measurePointerAngle(pointer_event) {
+    const centre_obj = this.#measureCentre();
+    return Math.atan2(
+      pointer_event.clientY - centre_obj.y_px_float,
+      pointer_event.clientX - centre_obj.x_px_float
+    );
   }
 
-  #sensitivity(e) {
-    if (e.shiftKey) return 0.125;   // fine
-    if (e.altKey) return 4;         // coarse
+  /**
+   * Resolve the speed multiplier implied by the modifier keys.
+   *
+   * Arguments:
+   *   input_event (Event): Event carrying shiftKey and altKey.
+   *
+   * Returns:
+   *   (number): Multiplier applied to the rotation.
+   */
+  #resolveSensitivity(input_event) {
+    if (input_event.shiftKey) {
+      return FINE_SENSITIVITY_FLOAT;
+    }
+    if (input_event.altKey) {
+      return COARSE_SENSITIVITY_FLOAT;
+    }
     return 1;
   }
 
-  #bind() {
-    const el = this.el;
+  /**
+   * Apply a rotation to the value, snapping when asked.
+   *
+   * Arguments:
+   *   degrees_float (number): Signed rotation to apply.
+   *   should_snap_bool (boolean): True to snap to the nearest semitone.
+   *
+   * Returns:
+   *   (none)
+   */
+  #applyRotation(degrees_float, should_snap_bool) {
+    this.#angle_degrees_float += degrees_float;
+    this.#spin_degrees_float = degrees_float;
+    this.#glow_float = 1;
 
-    const down = (e) => {
+    let next_hertz_float = this.frequency_hertz_float *
+      2 ** (degrees_float / DEGREES_PER_OCTAVE_FLOAT);
+    if (should_snap_bool) {
+      next_hertz_float =
+        this.tuning_obj.snapToNearestSemitone(next_hertz_float);
+    }
+    this.setFrequencyHertz(next_hertz_float);
+  }
+
+  /**
+   * Wire the pointer drag gesture.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #bindPointerGesture() {
+    const container_el = this.container_el;
+
+    const handlePointerDown = (pointer_event) => {
       // Ignore the secondary button so right-click can still open a menu.
-      if (e.button !== 0 && e.pointerType === 'mouse') return;
-      this.#dragging = true;
-      this.#lastAngle = this.#angleAt(e);
-      el.classList.add('is-dragging');
-      el.setPointerCapture?.(e.pointerId);
-      e.preventDefault();
-    };
-
-    const move = (e) => {
-      if (!this.#dragging) return;
-      const a = this.#angleAt(e);
-
-      // Unwrap across the ±π seam so a drag through "12 o'clock" is continuous.
-      let delta = a - this.#lastAngle;
-      if (delta > Math.PI) delta -= TAU_FLOAT;
-      else if (delta < -Math.PI) delta += TAU_FLOAT;
-      this.#lastAngle = a;
-
-      const degrees = (delta * 180) / Math.PI * this.#sensitivity(e);
-      this.#angle += degrees;
-      this.#spin = degrees;
-
-      let next = this.value * 2 ** (degrees / DEG_PER_OCTAVE);
-      if (e.ctrlKey || e.metaKey) next = this.tuning_obj.snapToNearestSemitone(next);
-
-      this.#glow = 1;
-      this.set(next);
-      e.preventDefault();
-    };
-
-    const up = (e) => {
-      if (!this.#dragging) return;
-      this.#dragging = false;
-      el.classList.remove('is-dragging');
-      el.releasePointerCapture?.(e.pointerId);
-    };
-
-    el.addEventListener('pointerdown', down);
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
-    el.addEventListener('lostpointercapture', up);
-
-    el.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const step = -Math.sign(e.deltaY) * 6 * this.#sensitivity(e);
-      this.#angle += step;
-      this.#spin = step;
-      this.#glow = 1;
-      let next = this.value * 2 ** (step / DEG_PER_OCTAVE);
-      if (e.ctrlKey || e.metaKey) next = this.tuning_obj.snapToNearestSemitone(next);
-      this.set(next);
-    }, { passive: false });
-
-    // Keyboard access: the dial is a real focusable control, not decoration.
-    el.tabIndex = 0;
-    el.setAttribute('role', 'slider');
-    el.setAttribute('aria-label', 'Frequency');
-    el.addEventListener('keydown', (e) => {
-      const fine = e.shiftKey ? 0.125 : e.altKey ? 4 : 1;
-      const semitone = 2 ** (1 / 12);
-      let handled = true;
-      switch (e.key) {
-        case 'ArrowUp': case 'ArrowRight': this.set(this.value * semitone ** fine); break;
-        case 'ArrowDown': case 'ArrowLeft': this.set(this.value / semitone ** fine); break;
-        case 'PageUp': this.set(this.value * 2); break;
-        case 'PageDown': this.set(this.value / 2); break;
-        case 'Home': this.set(440); break;
-        default: handled = false;
+      const is_mouse_bool = pointer_event.pointerType === 'mouse';
+      if (pointer_event.button !== 0 && is_mouse_bool) {
+        return;
       }
-      if (handled) { e.preventDefault(); this.#glow = 1; }
+      this.#is_dragging_bool = true;
+      this.#last_angle_radians_float =
+        this.#measurePointerAngle(pointer_event);
+      container_el.classList.add('is-dragging');
+      container_el.setPointerCapture?.(pointer_event.pointerId);
+      pointer_event.preventDefault();
+    };
+
+    const handlePointerMove = (pointer_event) => {
+      if (!this.#is_dragging_bool) {
+        return;
+      }
+      const angle_radians_float = this.#measurePointerAngle(pointer_event);
+
+      // Unwrap across the seam so a drag through 12 o'clock is continuous.
+      let delta_radians_float =
+        angle_radians_float - this.#last_angle_radians_float;
+      if (delta_radians_float > Math.PI) {
+        delta_radians_float -= TAU_FLOAT;
+      } else if (delta_radians_float < -Math.PI) {
+        delta_radians_float += TAU_FLOAT;
+      }
+      this.#last_angle_radians_float = angle_radians_float;
+
+      const degrees_float = (delta_radians_float * 180) / Math.PI *
+        this.#resolveSensitivity(pointer_event);
+      this.#applyRotation(
+        degrees_float, pointer_event.ctrlKey || pointer_event.metaKey
+      );
+      pointer_event.preventDefault();
+    };
+
+    const handlePointerUp = (pointer_event) => {
+      if (!this.#is_dragging_bool) {
+        return;
+      }
+      this.#is_dragging_bool = false;
+      container_el.classList.remove('is-dragging');
+      container_el.releasePointerCapture?.(pointer_event.pointerId);
+    };
+
+    container_el.addEventListener('pointerdown', handlePointerDown);
+    container_el.addEventListener('pointermove', handlePointerMove);
+    for (const event_name_str of
+      ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      container_el.addEventListener(event_name_str, handlePointerUp);
+    }
+  }
+
+  /**
+   * Wire the wheel gesture.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   *
+   * Warning:
+   *   Registered non-passive because it calls preventDefault to stop the
+   *   page scrolling while the pointer is over the dial.
+   */
+  #bindWheelGesture() {
+    this.container_el.addEventListener('wheel', (wheel_event) => {
+      wheel_event.preventDefault();
+      const degrees_float = -Math.sign(wheel_event.deltaY) *
+        WHEEL_DEGREES_PER_NOTCH_FLOAT *
+        this.#resolveSensitivity(wheel_event);
+      this.#applyRotation(
+        degrees_float, wheel_event.ctrlKey || wheel_event.metaKey
+      );
+    }, { passive: false });
+  }
+
+  /**
+   * Wire keyboard control and the slider semantics that go with it.
+   *
+   * Brief:
+   *   The dial is a real focusable control, not decoration, so it carries a
+   *   slider role and responds to the arrow, page and Home keys.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #bindKeyboard() {
+    const container_el = this.container_el;
+    container_el.tabIndex = 0;
+    container_el.setAttribute('role', 'slider');
+    container_el.setAttribute('aria-label', 'Frequency');
+
+    container_el.addEventListener('keydown', (keyboard_event) => {
+      const sensitivity_float = this.#resolveSensitivity(keyboard_event);
+      const step_ratio_float = SEMITONE_RATIO_FLOAT ** sensitivity_float;
+      const current_hertz_float = this.frequency_hertz_float;
+      let is_handled_bool = true;
+
+      switch (keyboard_event.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          this.setFrequencyHertz(current_hertz_float * step_ratio_float);
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          this.setFrequencyHertz(current_hertz_float / step_ratio_float);
+          break;
+        case 'PageUp':
+          this.setFrequencyHertz(current_hertz_float * 2);
+          break;
+        case 'PageDown':
+          this.setFrequencyHertz(current_hertz_float / 2);
+          break;
+        case 'Home':
+          this.setFrequencyHertz(DEFAULT_FREQUENCY_HERTZ_FLOAT);
+          break;
+        default:
+          is_handled_bool = false;
+      }
+
+      if (is_handled_bool) {
+        keyboard_event.preventDefault();
+        this.#glow_float = 1;
+      }
     });
+  }
+
+  /**
+   * Wire every input gesture the dial responds to.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #bindInteractions() {
+    this.#bindPointerGesture();
+    this.#bindWheelGesture();
+    this.#bindKeyboard();
   }
 
   /* =================================================================== */
 
-  #loop() {
-    const draw = () => {
-      this.#render();
-      this.#raf = requestAnimationFrame(draw);
+  /**
+   * Start the continuous render loop.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #startRenderLoop() {
+    const drawFrame = () => {
+      this.#animation_frame_id_int = requestAnimationFrame(drawFrame);
+      this.#renderDial();
     };
-    this.#raf = requestAnimationFrame(draw);
+    this.#animation_frame_id_int = requestAnimationFrame(drawFrame);
   }
 
-  destroy() {
-    cancelAnimationFrame(this.#raf);
+  /**
+   * Resize the backing canvas to the container, if needed.
+   *
+   * Arguments:
+   *   pixel_ratio_float (number): Device pixel ratio in use.
+   *
+   * Returns:
+   *   (boolean): False when the container has no width yet.
+   */
+  #syncCanvasSize(pixel_ratio_float) {
+    const bounds_obj = this.container_el.getBoundingClientRect();
+    if (!bounds_obj.width) {
+      return false;
+    }
+    const side_px_int = Math.round(bounds_obj.width * pixel_ratio_float);
+    if (this.canvas.width !== side_px_int) {
+      this.canvas.width = side_px_int;
+      this.canvas.height = side_px_int;
+    }
+    return true;
   }
 
-  #render() {
-    const canvas = this.canvas;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const rect = this.el.getBoundingClientRect();
-    if (!rect.width) return;
+  /**
+   * Draw the faint outer track.
+   *
+   * Arguments:
+   *   geometry_obj (Object): Dial geometry for this frame.
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawTrack(geometry_obj) {
+    const canvas_ctx = this.canvas_ctx;
+    canvas_ctx.beginPath();
+    canvas_ctx.arc(
+      geometry_obj.centre_px_float,
+      geometry_obj.centre_px_float,
+      geometry_obj.radius_px_float - 1.5 * geometry_obj.pixel_ratio_float,
+      0,
+      TAU_FLOAT
+    );
+    canvas_ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    canvas_ctx.lineWidth = 1 * geometry_obj.pixel_ratio_float;
+    canvas_ctx.stroke();
+  }
 
-    const w = Math.round(rect.width * dpr);
-    if (canvas.width !== w) {
-      canvas.width = w;
-      canvas.height = w;
+  /**
+   * Draw the rotating tick ring.
+   *
+   * Brief:
+   *   Ticks fade away from the top so the dial reads as a lit indicator
+   *   rather than a flat ring, which is what makes the rotation legible at
+   *   a glance.
+   *
+   * Arguments:
+   *   geometry_obj (Object): Dial geometry for this frame.
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawTicks(geometry_obj) {
+    const canvas_ctx = this.canvas_ctx;
+    const pixel_ratio_float = geometry_obj.pixel_ratio_float;
+    const centre_px_float = geometry_obj.centre_px_float;
+    const base_radians_float = (this.#angle_degrees_float * Math.PI) / 180;
+
+    for (let tick_int = 0; tick_int < TICK_COUNT_INT; tick_int++) {
+      const angle_radians_float =
+        base_radians_float + (tick_int / TICK_COUNT_INT) * TAU_FLOAT;
+      const is_major_bool = tick_int % MAJOR_TICK_EVERY_INT === 0;
+      const length_px_float = (is_major_bool ? 11 : 5.5) * pixel_ratio_float;
+      const outer_px_float =
+        geometry_obj.radius_px_float - 3 * pixel_ratio_float;
+      const inner_px_float = outer_px_float - length_px_float;
+
+      const facing_float = Math.cos(angle_radians_float + Math.PI / 2);
+      const alpha_float = 0.14 + 0.5 * Math.max(0, facing_float) ** 2;
+
+      canvas_ctx.beginPath();
+      canvas_ctx.moveTo(
+        centre_px_float + Math.cos(angle_radians_float) * outer_px_float,
+        centre_px_float + Math.sin(angle_radians_float) * outer_px_float
+      );
+      canvas_ctx.lineTo(
+        centre_px_float + Math.cos(angle_radians_float) * inner_px_float,
+        centre_px_float + Math.sin(angle_radians_float) * inner_px_float
+      );
+      canvas_ctx.strokeStyle = is_major_bool
+        ? `rgba(0, 242, 254, ${alpha_float + 0.2})`
+        : `rgba(185, 196, 220, ${alpha_float * 0.7})`;
+      canvas_ctx.lineWidth = (is_major_bool ? 1.6 : 1) * pixel_ratio_float;
+      canvas_ctx.stroke();
+    }
+  }
+
+  /**
+   * Draw the fixed index marker at 12 o'clock.
+   *
+   * Arguments:
+   *   geometry_obj (Object): Dial geometry for this frame.
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawIndexMarker(geometry_obj) {
+    const canvas_ctx = this.canvas_ctx;
+    const pixel_ratio_float = geometry_obj.pixel_ratio_float;
+    const centre_px_float = geometry_obj.centre_px_float;
+    const top_px_float = centre_px_float - geometry_obj.radius_px_float;
+
+    canvas_ctx.beginPath();
+    canvas_ctx.moveTo(centre_px_float, top_px_float + 1 * pixel_ratio_float);
+    canvas_ctx.lineTo(centre_px_float, top_px_float + 15 * pixel_ratio_float);
+    canvas_ctx.strokeStyle = '#00f2fe';
+    canvas_ctx.lineWidth = 2 * pixel_ratio_float;
+    canvas_ctx.shadowBlur = 10 * pixel_ratio_float;
+    canvas_ctx.shadowColor = 'rgba(0,242,254,0.85)';
+    canvas_ctx.stroke();
+    canvas_ctx.shadowBlur = 0;
+  }
+
+  /**
+   * Draw the arc showing where the value sits inside its octave.
+   *
+   * Arguments:
+   *   geometry_obj (Object): Dial geometry for this frame.
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawOctaveArc(geometry_obj) {
+    const canvas_ctx = this.canvas_ctx;
+    const octave_fraction_float = Math.log2(this.frequency_hertz_float) % 1;
+    const positive_fraction_float = octave_fraction_float < 0
+      ? octave_fraction_float + 1
+      : octave_fraction_float;
+    const sweep_radians_float = positive_fraction_float * TAU_FLOAT;
+
+    canvas_ctx.beginPath();
+    canvas_ctx.arc(
+      geometry_obj.centre_px_float,
+      geometry_obj.centre_px_float,
+      geometry_obj.radius_px_float - 20 * geometry_obj.pixel_ratio_float,
+      -Math.PI / 2,
+      -Math.PI / 2 + sweep_radians_float
+    );
+    canvas_ctx.strokeStyle =
+      `rgba(168, 85, 247, ${0.45 + this.#glow_float * 0.4})`;
+    canvas_ctx.lineWidth = 2.5 * geometry_obj.pixel_ratio_float;
+    canvas_ctx.lineCap = 'round';
+    canvas_ctx.stroke();
+  }
+
+  /**
+   * Draw the decaying momentum smear behind a fast rotation.
+   *
+   * Arguments:
+   *   geometry_obj (Object): Dial geometry for this frame.
+   *
+   * Returns:
+   *   (none)
+   */
+  #drawMomentumSmear(geometry_obj) {
+    if (Math.abs(this.#spin_degrees_float) <= MIN_SMEAR_SPIN_DEGREES_FLOAT) {
+      return;
+    }
+    const canvas_ctx = this.canvas_ctx;
+    const alpha_float = clampToRange(
+      Math.abs(this.#spin_degrees_float) / SMEAR_SPIN_SCALE_FLOAT,
+      0,
+      MAX_SMEAR_ALPHA_FLOAT
+    );
+    const base_radians_float = (this.#angle_degrees_float * Math.PI) / 180;
+    const sweep_radians_float =
+      ((this.#spin_degrees_float * Math.PI) / 180) * 6;
+
+    canvas_ctx.beginPath();
+    canvas_ctx.arc(
+      geometry_obj.centre_px_float,
+      geometry_obj.centre_px_float,
+      geometry_obj.radius_px_float - 10 * geometry_obj.pixel_ratio_float,
+      base_radians_float,
+      base_radians_float + sweep_radians_float
+    );
+    canvas_ctx.strokeStyle = `rgba(0, 242, 254, ${alpha_float})`;
+    canvas_ctx.lineWidth = 3 * geometry_obj.pixel_ratio_float;
+    canvas_ctx.stroke();
+  }
+
+  /**
+   * Draw one frame of the dial.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #renderDial() {
+    const pixel_ratio_float = Math.min(
+      window.devicePixelRatio || 1, MAX_PIXEL_RATIO_FLOAT
+    );
+    if (!this.#syncCanvasSize(pixel_ratio_float)) {
+      return;
     }
 
-    const c = this.ctx;
-    const size = canvas.width;
-    const cx = size / 2;
-    const cy = size / 2;
-    const R = size / 2 - 2 * dpr;
+    const side_px_int = this.canvas.width;
+    const geometry_obj = {
+      pixel_ratio_float,
+      centre_px_float: side_px_int / 2,
+      radius_px_float: side_px_int / 2 - 2 * pixel_ratio_float,
+    };
 
-    c.clearRect(0, 0, size, size);
+    this.canvas_ctx.clearRect(0, 0, side_px_int, side_px_int);
 
-    // Decay the momentum trail and the glow.
-    this.#spin *= 0.86;
-    this.#glow *= 0.94;
+    // Decay the momentum trail and the interaction glow.
+    this.#spin_degrees_float *= SPIN_DECAY_FLOAT;
+    this.#glow_float *= GLOW_DECAY_FLOAT;
 
-    // --- outer track ------------------------------------------------
-    c.beginPath();
-    c.arc(cx, cy, R - 1.5 * dpr, 0, TAU_FLOAT);
-    c.strokeStyle = 'rgba(255,255,255,0.07)';
-    c.lineWidth = 1 * dpr;
-    c.stroke();
-
-    // --- rotating ticks ----------------------------------------------
-    const ticks = 72;
-    const base = (this.#angle * Math.PI) / 180;
-    for (let i = 0; i < ticks; i++) {
-      const a = base + (i / ticks) * TAU_FLOAT;
-      const major = i % 6 === 0;
-      const len = (major ? 11 : 5.5) * dpr;
-      const r0 = R - 3 * dpr;
-      const r1 = r0 - len;
-
-      // Fade ticks away from the top so the dial reads as a lit indicator.
-      const facing = Math.cos(a + Math.PI / 2);
-      const alpha = 0.14 + 0.5 * Math.max(0, facing) ** 2;
-
-      c.beginPath();
-      c.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
-      c.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
-      c.strokeStyle = major
-        ? `rgba(0, 242, 254, ${alpha + 0.2})`
-        : `rgba(185, 196, 220, ${alpha * 0.7})`;
-      c.lineWidth = (major ? 1.6 : 1) * dpr;
-      c.stroke();
-    }
-
-    // --- index marker at 12 o'clock -----------------------------------
-    c.beginPath();
-    c.moveTo(cx, cy - R + 1 * dpr);
-    c.lineTo(cx, cy - R + 15 * dpr);
-    c.strokeStyle = '#00f2fe';
-    c.lineWidth = 2 * dpr;
-    c.shadowBlur = 10 * dpr;
-    c.shadowColor = 'rgba(0,242,254,0.85)';
-    c.stroke();
-    c.shadowBlur = 0;
-
-    // --- octave arc: position of the current value within its octave ----
-    const octFraction = Math.log2(this.value) % 1;
-    const sweep = (octFraction < 0 ? octFraction + 1 : octFraction) * TAU_FLOAT;
-    c.beginPath();
-    c.arc(cx, cy, R - 20 * dpr, -Math.PI / 2, -Math.PI / 2 + sweep);
-    c.strokeStyle = `rgba(168, 85, 247, ${0.45 + this.#glow * 0.4})`;
-    c.lineWidth = 2.5 * dpr;
-    c.lineCap = 'round';
-    c.stroke();
-
-    // --- momentum smear ------------------------------------------------
-    if (Math.abs(this.#spin) > 0.15) {
-      const smear = clampToRange(Math.abs(this.#spin) / 26, 0, 0.7);
-      c.beginPath();
-      c.arc(cx, cy, R - 10 * dpr, base, base + (this.#spin * Math.PI) / 180 * 6);
-      c.strokeStyle = `rgba(0, 242, 254, ${smear})`;
-      c.lineWidth = 3 * dpr;
-      c.stroke();
-    }
+    this.#drawTrack(geometry_obj);
+    this.#drawTicks(geometry_obj);
+    this.#drawIndexMarker(geometry_obj);
+    this.#drawOctaveArc(geometry_obj);
+    this.#drawMomentumSmear(geometry_obj);
   }
 }

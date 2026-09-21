@@ -5,7 +5,7 @@
  * out of main.js so that the bootstrapper stays readable.
  */
 
-import { toast, confirmDialog } from './feedback.js';
+import { showToast, requestConfirmation } from './feedback.js';
 import { renderQR } from '../util/qr.js';
 import { EQ_BAND_CENTRES_HERTZ_LIST } from '../dsp/weighting.js';
 import { formatFrequency, mapFrequencyToPosition } from '../util/frequency.js';
@@ -47,7 +47,7 @@ export class CalibrationPanel {
     this.btnExport.addEventListener('click', () => this.download());
 
     this.cal.on('progress', (p) => this.#progress(p));
-    this.cal.on('warn', (m) => toast(m, 'warn'));
+    this.cal.on('warn', (m) => showToast(m, 'warn'));
     this.cal.on('result', () => { this.#draw(); this.#stats(); });
 
     // Drag a previously exported curve onto the chart to load it.
@@ -69,9 +69,9 @@ export class CalibrationPanel {
         this.#stats();
         this.btnApply.disabled = false;
         this.btnExport.disabled = false;
-        toast(`Loaded calibration from ${file.name}`, 'ok');
+        showToast(`Loaded calibration from ${file.name}`, 'ok');
       } catch (err) {
-        toast(`Could not read that file: ${err.message}`, 'err');
+        showToast(`Could not read that file: ${err.message}`, 'err');
       }
     });
 
@@ -80,20 +80,20 @@ export class CalibrationPanel {
 
   async run() {
     if (!this.app.engine.is_ready_bool) {
-      toast('Start the audio engine first.', 'warn');
+      showToast('Start the audio engine first.', 'warn');
       return;
     }
 
-    const ok = await confirmDialog({
-      title: 'Measure your speakers and room',
-      body:
+    const ok = await requestConfirmation({
+      title_str: 'Measure your speakers and room',
+      body_html_str:
         'SonicForge will play a 3-second sweep through your <b>speakers</b> and listen back with the ' +
         '<b>microphone</b>, then build a correction curve.<br><br>' +
         '<b>Take your headphones off</b> — measuring headphones through a laptop mic tells you nothing. ' +
         'Keep the room quiet and stay still.<br><br>' +
         '<span class="text-cyan">The recording never leaves this device.</span> Nothing is stored, nothing is uploaded, ' +
         'and the microphone is released the instant the sweep ends.',
-      confirm: 'Start measurement',
+      confirm_label_str: 'Start measurement',
     });
     if (!ok) return;
 
@@ -111,9 +111,9 @@ export class CalibrationPanel {
       this.state.className = result.confidence_float > 0.6 ? 'badge badge--lime' : 'badge badge--amber';
 
       if (result.confidence_float < 0.35) {
-        toast('Low confidence — check that the speakers are audible and the room is quiet.', 'warn', 7000);
+        showToast('Low confidence — check that the speakers are audible and the room is quiet.', 'warn', 7000);
       } else {
-        toast('Measurement complete. Press Apply to engage the correction.', 'ok');
+        showToast('Measurement complete. Press Apply to engage the correction.', 'ok');
       }
       this.#persist();
     } catch (err) {
@@ -123,7 +123,7 @@ export class CalibrationPanel {
       } else {
         this.state.textContent = 'failed';
         this.state.className = 'badge badge--rose';
-        toast(friendlyMicError(err), 'err', 8000);
+        showToast(friendlyMicError(err), 'err', 8000);
       }
     } finally {
       this.#abort = null;
@@ -141,7 +141,7 @@ export class CalibrationPanel {
     const on = this.cal.toggleCorrection();
     this.btnApply.textContent = this.cal.is_applied_bool ? 'Bypass' : 'Apply';
     this.btnApply.classList.toggle('is-active', this.cal.is_applied_bool);
-    toast(this.cal.is_applied_bool ? 'Correction engaged.' : 'Correction bypassed.', 'ok', 2200);
+    showToast(this.cal.is_applied_bool ? 'Correction engaged.' : 'Correction bypassed.', 'ok', 2200);
     this.#draw();
     return on;
   }
@@ -155,7 +155,7 @@ export class CalibrationPanel {
     a.download = `sonicforge-calibration-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast('Calibration curve exported.', 'ok');
+    showToast('Calibration curve exported.', 'ok');
   }
 
   #progress({ phase_str, progress_float, message_str }) {
@@ -369,9 +369,9 @@ export class ConcertPanel {
       const url = this.concert.joinUrl({ relayUrl: this.#relayUrl() });
       try {
         await navigator.clipboard.writeText(url);
-        toast('Join link copied.', 'ok', 2200);
+        showToast('Join link copied.', 'ok', 2200);
       } catch {
-        toast(url, 'info', 9000);
+        showToast(url, 'info', 9000);
       }
     });
 
@@ -389,13 +389,13 @@ export class ConcertPanel {
         waveform: ch?.waveform ?? 'sine',
         gainDb: ch?.gainDb ?? -14,
       });
-      if (at) toast('Tone scheduled on every node.', 'ok', 2200);
-      else toast('Only the master node can schedule.', 'warn');
+      if (at) showToast('Tone scheduled on every node.', 'ok', 2200);
+      else showToast('Only the master node can schedule.', 'warn');
     });
 
     e.push.addEventListener('click', () => {
-      if (this.concert.broadcastState()) toast('State pushed to all nodes.', 'ok', 2200);
-      else toast('Only the master node can push state.', 'warn');
+      if (this.concert.broadcastState()) showToast('State pushed to all nodes.', 'ok', 2200);
+      else showToast('Only the master node can push state.', 'warn');
     });
 
     // --- manual WebRTC pairing ---------------------------------------
@@ -404,35 +404,35 @@ export class ConcertPanel {
         const code = await this.concert.transport.createOffer();
         e.signal.value = code;
         e.signal.select();
-        toast('Offer created — send this code to the other device.', 'ok', 5000);
+        showToast('Offer created — send this code to the other device.', 'ok', 5000);
       } catch (err) {
-        toast(err.message, 'err');
+        showToast(err.message, 'err');
       }
     });
 
     e.accept.addEventListener('click', async () => {
       const code = e.signal.value.trim();
-      if (!code) return toast('Paste a pairing code first.', 'warn');
+      if (!code) return showToast('Paste a pairing code first.', 'warn');
       try {
         const t = this.concert.transport;
         if (t.role === 'offerer') {
           await t.acceptAnswer(code);
-          toast('Answer accepted — connecting…', 'ok');
+          showToast('Answer accepted — connecting…', 'ok');
         } else {
           const reply = await t.acceptOffer(code);
           e.signal.value = reply;
           e.signal.select();
-          toast('Reply code generated — send it back to the host.', 'ok', 6000);
+          showToast('Reply code generated — send it back to the host.', 'ok', 6000);
         }
       } catch (err) {
-        toast(err.message, 'err', 6000);
+        showToast(err.message, 'err', 6000);
       }
     });
 
     e.copySignal.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(e.signal.value);
-        toast('Code copied.', 'ok', 1800);
+        showToast('Code copied.', 'ok', 1800);
       } catch {}
     });
 
@@ -447,11 +447,11 @@ export class ConcertPanel {
       this.app.log(`[concert] clock locked: offset ${offsetMs.toFixed(1)} ms, rtt ${rttMs.toFixed(1)} ms (${samples} probes)`, 'ok');
     });
     c.on('syncing', (on) => { if (on) e.offset.textContent = 'syncing…'; });
-    c.on('syncfail', (m) => toast(m, 'warn'));
+    c.on('syncfail', (m) => showToast(m, 'warn'));
     c.on('late', ({ byMs }) =>
       this.app.log(`[concert] event arrived ${byMs.toFixed(0)} ms late and was dropped`, 'warn')
     );
-    c.on('open', (info) => toast(`Connected via ${TRANSPORT_KINDS[info.kind].label}.`, 'ok'));
+    c.on('open', (info) => showToast(`Connected via ${TRANSPORT_KINDS[info.kind].label}.`, 'ok'));
     c.on('closed', () => this.#render());
     c.on('mirrored', () => this.app.syncUi());
   }
@@ -481,18 +481,18 @@ export class ConcertPanel {
       await this.concert.host({ kind: this.kind, relayUrl: this.#relayUrl() });
       this.app.log(`[concert] hosting room ${this.concert.room} via ${this.kind}`, 'ok');
     } catch (err) {
-      toast(err.message, 'err', 6000);
+      showToast(err.message, 'err', 6000);
     }
   }
 
   async join() {
     const code = this.el.code.value.trim().toUpperCase();
-    if (!code) return toast('Enter the room code from the master device.', 'warn');
+    if (!code) return showToast('Enter the room code from the master device.', 'warn');
     try {
       await this.concert.join(code, { kind: this.kind, relayUrl: this.#relayUrl() });
       this.app.log(`[concert] joined room ${code} via ${this.kind}`, 'ok');
     } catch (err) {
-      toast(err.message, 'err', 6000);
+      showToast(err.message, 'err', 6000);
     }
   }
 
@@ -577,12 +577,12 @@ export class ConcertPanel {
       this.#setKind('relay');
     }
 
-    const ok = await confirmDialog({
-      title: `Join room ${parsed.room}?`,
-      body:
+    const ok = await requestConfirmation({
+      title_str: `Join room ${parsed.room}?`,
+      body_html_str:
         'This link invites you into a SonicForge Concert Mode session. ' +
         'Your device will mirror the host’s tones and play in sync with it.',
-      confirm: 'Join session',
+      confirm_label_str: 'Join session',
     });
     if (ok) this.join();
   }
