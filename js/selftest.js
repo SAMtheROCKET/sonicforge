@@ -11,6 +11,8 @@
  * real user: on any other origin the import is skipped entirely by main.js.
  */
 
+import { restoreSession } from './app/session.js';
+
 const checks = [];
 const consoleErrors = [];
 
@@ -344,6 +346,68 @@ export async function runSelfTest(app, { boot }) {
     const reached = app.concert.phase_degrees_int;
     app.concert.setPhaseDegrees(0);
     return verdict(reached === 180, `offset became ${reached}°`);
+  });
+
+  // A reload must never start playing. The forced-stopped keys have to be
+  // the ones the deserialisers actually read: a differently named key is
+  // ignored, the saved running state passes through, and the page comes
+  // back sounding.
+  await (async () => {
+    const saved = localStorage.getItem('sonicforge.session');
+    const channel = app.rack.getChannel(0);
+    channel.setGainDb(-60);
+    channel.start();
+    app.rack.getChannel(2).start();
+
+    localStorage.setItem('sonicforge.session', JSON.stringify({
+      v: 1,
+      a4: 440,
+      masterDb: app.engine.masterLevelDb,
+      channels: app.rack.toJSON(),
+      noise: { ...app.noise.toJSON(), is_running_bool: true },
+      viz: 'waterfall',
+    }));
+    app.rack.stopAllChannels();
+
+    restoreSession(app);
+    await sleep(120);
+    const live = app.rack.activeChannelCount;
+    const noisy = app.noise.is_running_bool;
+
+    app.rack.stopAllChannels();
+    app.noise.stop();
+    if (saved === null) {
+      localStorage.removeItem('sonicforge.session');
+    } else {
+      localStorage.setItem('sonicforge.session', saved);
+    }
+
+    checks.push({
+      name: 'a restored session leaves every source stopped',
+      ok: live === 0 && !noisy,
+      detail: `${live} channels live, noise ${noisy ? 'running' : 'idle'}`,
+      critical: true,
+    });
+  })();
+
+  // Add-tone copies the selected channel's waveform. It used to read a
+  // property that no longer exists, so every added tone was a sine.
+  check('add-tone copies the selected waveform', () => {
+    app.rack.stopAllChannels();
+    const source = app.rack.getChannel(0);
+    source.setWaveformName('square');
+    app.ui.channels.selectChannel(0);
+    source.start();
+
+    document.getElementById('btn-add-tone').click();
+    const added = app.rack.channels_list.find(
+      (c) => c.is_enabled_bool && c.index_int !== 0
+    );
+    const waveform = added?.waveform_name_str;
+    app.rack.stopAllChannels();
+    source.setWaveformName('sine');
+
+    return verdict(waveform === 'square', `added a ${waveform}`);
   });
 
   check('calibration curve canvas present', () =>

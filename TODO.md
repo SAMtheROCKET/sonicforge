@@ -99,8 +99,12 @@ function, <=100 LOC entry point, <=79 char lines. Applies to **every** language 
       (fixed: dead row frequency field, dead calibration readout,
       Concert sync tone ignoring the selected channel)
 - [x] P12.7a `js/script/vm.js`
-- [ ] P12.7b `js/script/commands.js`
-- [ ] P12.7c `js/sync/` + `js/presets/`
+- [x] P12.7b `js/script/commands.js` — split into arguments,
+      runtime, voice and the registry (fixed: dead set() alias)
+- [x] P12.7c `js/sync/` — transport + signal-codec + concert
+      (fixed: dead phase slider, dropped node phase offset)
+- [x] P12.7d `js/presets/` — split by group
+      (fixed: noise blend slot, Tinnitus Notch frequency)
 - [ ] P12.8 Split `main.js` into wiring modules so the entry point is <=100 LOC
 - [ ] P12.9 Python (`serve.py`, `lint_style.py`), CSS and HTML to the same rules
 - [ ] P12.10 Re-run lint to zero + re-run both suites to prove nothing regressed

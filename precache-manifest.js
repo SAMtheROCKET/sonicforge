@@ -12,7 +12,7 @@
  */
 
 self.__SONICFORGE_PRECACHE = {
-  version: 'a2e97fd32120',
+  version: '8343acbe649e',
   files: [
     './assets/icon.svg',
     './assets/logo-mark.svg',
@@ -20,6 +20,19 @@ self.__SONICFORGE_PRECACHE = {
     './css/components.css',
     './css/theme.css',
     './index.html',
+    './js/app/boot.js',
+    './js/app/channel-panel.js',
+    './js/app/dom.js',
+    './js/app/facade.js',
+    './js/app/frame-loop.js',
+    './js/app/header-panel.js',
+    './js/app/noise-panel.js',
+    './js/app/oscillator-panel.js',
+    './js/app/preset-panel.js',
+    './js/app/session.js',
+    './js/app/shortcuts.js',
+    './js/app/terminal-panel.js',
+    './js/app/visualiser-panel.js',
     './js/core/audio-engine.js',
     './js/core/calibration-analysis.js',
     './js/core/calibration-capture.js',
