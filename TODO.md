@@ -93,9 +93,14 @@ function, <=100 LOC entry point, <=79 char lines. Applies to **every** language 
 - [x] P12.2 `js/dsp/` — fft, weighting, noise-shapes
 - [x] P12.3 `js/core/` — tuning, waveforms, engine, channel, noise, calibration
 - [x] P12.4 `js/script/` — lexer, parser, vm, commands
-- [ ] P12.5 `js/viz/` — glutil, waterfall, interference
-- [ ] P12.6 `js/ui/` — icons, feedback, dial, channels, terminal, panels
-- [ ] P12.7 `js/sync/` + `js/presets/`
+- [x] P12.5 `js/viz/` — glutil, waterfall, interference (fixed: dead goniometer)
+- [x] P12.6 `js/ui/` — icons, feedback, dial, channels, terminal;
+      panels split into calibration-panel + concert-panel
+      (fixed: dead row frequency field, dead calibration readout,
+      Concert sync tone ignoring the selected channel)
+- [x] P12.7a `js/script/vm.js`
+- [ ] P12.7b `js/script/commands.js`
+- [ ] P12.7c `js/sync/` + `js/presets/`
 - [ ] P12.8 Split `main.js` into wiring modules so the entry point is <=100 LOC
 - [ ] P12.9 Python (`serve.py`, `lint_style.py`), CSS and HTML to the same rules
 - [ ] P12.10 Re-run lint to zero + re-run both suites to prove nothing regressed
