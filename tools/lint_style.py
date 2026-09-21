@@ -160,6 +160,38 @@ def count_code_lines(lines_list, start_index_int=0, end_index_int=None):
     return code_line_count_int
 
 
+def find_embedded_content_lines(lines_list):
+    """
+    Locate lines that sit inside a multi-line template literal.
+
+    Brief:
+        A template literal spanning several lines is embedded content, not
+        code: a GLSL shader, a script in the tool's own language, a block of
+        author copy. Rewrapping those lines would change the data rather
+        than reformat the program, so the column limit cannot apply to them.
+        A single-line template literal is an ordinary expression and stays
+        subject to every rule.
+
+    Arguments:
+        lines_list (list[str]): Source lines.
+
+    Returns:
+        (set[int]): One-based line numbers holding embedded content.
+    """
+    embedded_set = set()
+    is_inside_bool = False
+
+    for line_index_int, line_str in enumerate(lines_list, start=1):
+        backtick_count_int = line_str.count("`") - line_str.count("\\`")
+
+        if is_inside_bool:
+            embedded_set.add(line_index_int)
+        if backtick_count_int % 2 == 1:
+            is_inside_bool = not is_inside_bool
+
+    return embedded_set
+
+
 def check_line_lengths(lines_list, path_str, report_obj):
     """
     Flag every source line longer than the configured column limit.
@@ -171,8 +203,16 @@ def check_line_lengths(lines_list, path_str, report_obj):
 
     Returns:
         (none)
+
+    Warning:
+        Lines inside a multi-line template literal are skipped; see
+        find_embedded_content_lines for why.
     """
+    embedded_set = find_embedded_content_lines(lines_list)
+
     for line_index_int, line_str in enumerate(lines_list, start=1):
+        if line_index_int in embedded_set:
+            continue
         length_int = len(line_str.rstrip("\n"))
         if length_int > MAX_LINE_LENGTH_INT:
             report_obj.add(

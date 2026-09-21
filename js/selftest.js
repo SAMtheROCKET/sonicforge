@@ -278,6 +278,43 @@ export async function runSelfTest(app, { boot }) {
     }
   })();
 
+  // The blend has two slots. Callers used to pass the interface's 'A'/'B'
+  // labels, which the model silently read as "primary" -- so setting colour
+  // B overwrote colour A and the crossfade had one colour on both sides.
+  await (async () => {
+    // setColour is async, so a bad slot arrives as a rejected promise, not
+    // a throw. Catching it synchronously would leave an unhandled rejection
+    // and fail the frame-loop check instead of this one.
+    const before = app.noise.secondary_colour_str;
+    let rejected = false;
+    try {
+      await app.noise.setColour('brown', 'B');
+    } catch (err) {
+      rejected = /unknown noise slot/.test(err.message);
+    }
+    checks.push({
+      name: 'noise slots are addressed by the names the model defines',
+      ok: rejected && app.noise.secondary_colour_str === before,
+      detail: rejected
+        ? 'an unknown slot name is rejected'
+        : 'a bad slot was accepted',
+      critical: true,
+    });
+  })();
+
+  await (async () => {
+    await app.noise.setColour('white', 'primary');
+    await app.noise.setColour('brown', 'secondary');
+    checks.push({
+      name: 'the two noise slots hold different colours',
+      ok: app.noise.primary_colour_str === 'white' &&
+        app.noise.secondary_colour_str === 'brown',
+      detail: `${app.noise.primary_colour_str} / ` +
+        `${app.noise.secondary_colour_str}`,
+      critical: true,
+    });
+  })();
+
   check('every preset has a runnable definition', () => {
     let bad = [];
     for (const p of app.__presets ?? []) {

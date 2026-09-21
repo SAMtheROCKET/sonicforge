@@ -585,14 +585,14 @@ function buildNoiseBuffer() {
   segA.addEventListener('click', async (e) => {
     const c = e.target.closest('[data-color]')?.dataset.color;
     if (!c) return;
-    await app.noise.setColour(c, 'A');
+    await app.noise.setColour(c, 'primary');
     syncNoisePanel();
   });
 
   const selB = $('noise-b');
   selB.innerHTML = NOISE_COLOUR_KEYS_LIST.map((k) => `<option value="${k}">${NOISE_COLOURS_DICT[k].label_str}</option>`).join('');
   selB.addEventListener('change', async () => {
-    await app.noise.setColour(selB.value, 'B');
+    await app.noise.setColour(selB.value, 'secondary');
     syncNoisePanel();
   });
 

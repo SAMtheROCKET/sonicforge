@@ -96,6 +96,9 @@ const SOURCE_SWAP_SECONDS_FLOAT = 0.02;
  */
 const STEREO_DECORRELATION_OFFSET_INT = 7919;
 
+/** The two colour slots the blend crossfades between. */
+const NOISE_SLOT_NAMES_TUPLE = Object.freeze(['primary', 'secondary']);
+
 /* ------------------------------------------------------------------------ */
 
 /**
@@ -429,6 +432,15 @@ export class NoiseGenerator extends Emitter {
   async setColour(colour_name_str, slot_name_str = 'primary') {
     if (!NOISE_COLOURS_DICT[colour_name_str]) {
       throw new RangeError(`unknown noise colour: ${colour_name_str}`);
+    }
+    // Rejected rather than treated as primary. Silently falling back meant
+    // a caller using the interface's own 'A'/'B' labels overwrote slot one
+    // and quietly disabled the blend.
+    if (!NOISE_SLOT_NAMES_TUPLE.includes(slot_name_str)) {
+      throw new RangeError(
+        `unknown noise slot: ${slot_name_str} ` +
+        `(expected ${NOISE_SLOT_NAMES_TUPLE.join(' or ')})`
+      );
     }
 
     const is_secondary_bool = slot_name_str === 'secondary';

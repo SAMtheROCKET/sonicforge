@@ -12,7 +12,7 @@
  */
 
 self.__SONICFORGE_PRECACHE = {
-  version: 'f77d36fb8576',
+  version: 'a2e97fd32120',
   files: [
     './assets/icon.svg',
     './assets/logo-mark.svg',
@@ -40,7 +40,11 @@ self.__SONICFORGE_PRECACHE = {
     './js/dsp/smoothing.js',
     './js/dsp/weighting.js',
     './js/main.js',
+    './js/presets/flame-presets.js',
+    './js/presets/focus-presets.js',
+    './js/presets/lab-presets.js',
     './js/presets/presets.js',
+    './js/presets/recovery-presets.js',
     './js/pwa.js',
     './js/script/arguments.js',
     './js/script/commands.js',
