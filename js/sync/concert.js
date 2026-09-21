@@ -1,84 +1,261 @@
 /**
- * Concert Mode — multi-device orchestration.
+ * Concert Mode: multi-device orchestration.
  *
- * One device becomes the Master Node; every other device that joins the room
- * mirrors its state and plays in step with it. The interesting part is not the
- * messaging (that is a room broadcast), it is the CLOCK.
+ * Brief:
+ *   One device becomes the master; every other device that joins the room
+ *   mirrors its state and plays in step with it. The interesting part is
+ *   not the messaging, which is a room broadcast, it is the clock.
  *
- * Two phones have unrelated `performance.now()` epochs and unrelated
- * AudioContext clocks. Playing "now" on both is useless — the offset between
- * them is tens of milliseconds, which at 300 Hz is many wavelengths and makes
- * any phase claim meaningless. So each node runs an NTP-style exchange against
- * the master, takes the median offset over several probes to reject jitter,
- * and every scheduled event is expressed in MASTER time. A node converts
- * master time to its own AudioContext timeline and schedules against the
- * sample clock, which is the only clock in the browser that does not drift.
+ *   Two phones have unrelated performance.now() epochs and unrelated
+ *   AudioContext clocks. Playing "now" on both is useless: the offset
+ *   between them is tens of milliseconds, which at 300 Hz is many
+ *   wavelengths and makes any phase claim meaningless. So each node runs an
+ *   NTP-style exchange against the master, takes the median offset over
+ *   several probes to reject jitter, and every scheduled event is expressed
+ *   in master time. A node converts master time to its own AudioContext
+ *   timeline and schedules against the sample clock, the only clock in the
+ *   browser that does not drift.
  *
- * Each node additionally carries a phase offset, 0–360°, applied to every tone
- * it plays. Two devices a metre apart, one at 0° and one at 180°, is a
- * genuine active-cancellation experiment you can hear.
+ *   Each node additionally carries a phase offset, 0-360 degrees, applied
+ *   to every tone it plays. Two devices a metre apart, one at 0 and one at
+ *   180, is a genuine active-cancellation experiment you can hear.
+ *
+ * Warning:
+ *   The wire field names below (t, from, to, seq, c0, c1, phaseDeg and the
+ *   rest) are the protocol, not our identifiers. They are deliberately left
+ *   in their original spelling: renaming them would stop two devices
+ *   running different builds from understanding each other.
  */
 
 import { Emitter } from '../util/events.js';
 import { clampToRange, computeMedian } from '../util/numeric.js';
 import { applyWaveform } from '../core/waveforms.js';
-import { createTransport, makeRoomCode, makePeerId, TRANSPORT_KINDS } from './transport.js';
+import {
+  createTransport,
+  makeRoomCode,
+  makePeerId,
+  TRANSPORT_KINDS,
+} from './transport.js';
 
-export const ROLE = Object.freeze({ SOLO: 'solo', MASTER: 'master', NODE: 'node' });
+/* ---------------------------------------------------------------------------
+ * Constants
+ * ------------------------------------------------------------------------ */
 
-const PROBE_COUNT = 9;
-const PROBE_INTERVAL = 220;
-const RESYNC_INTERVAL = 15000;
-const PEER_TIMEOUT = 12000;
+/** The part a device plays in a session. */
+export const ROLE = Object.freeze({
+  SOLO: 'solo',
+  MASTER: 'master',
+  NODE: 'node',
+});
 
+/** Probes per synchronisation burst, and the gap between them. */
+const PROBE_COUNT_INT = 9;
+const PROBE_INTERVAL_MS_INT = 220;
+
+/** How often a node re-synchronises its clock, in milliseconds. */
+const RESYNC_INTERVAL_MS_INT = 15000;
+
+/** How long a peer may go unheard before it is dropped, in milliseconds. */
+const PEER_TIMEOUT_MS_INT = 12000;
+
+/** Interval between presence beats, in milliseconds. */
+const HEARTBEAT_INTERVAL_MS_INT = 3000;
+
+/** Lead time given to a scheduled tone, in milliseconds. */
+const DEFAULT_LEAD_MS_INT = 600;
+
+/** How late an event may arrive before it is dropped, in seconds. */
+const LATE_TOLERANCE_SECONDS_FLOAT = 0.05;
+
+/** Minimum lead given to a tone that only just arrived, in seconds. */
+const MIN_START_LEAD_SECONDS_FLOAT = 0.005;
+
+/** Envelope of a scheduled tone, in seconds. */
+const SCHEDULED_ATTACK_SECONDS_FLOAT = 0.006;
+const SCHEDULED_RELEASE_SECONDS_FLOAT = 0.02;
+const SCHEDULED_MIN_SUSTAIN_SECONDS_FLOAT = 0.01;
+const SCHEDULED_STOP_TAIL_SECONDS_FLOAT = 0.03;
+
+/** A full turn, in degrees. */
+const FULL_TURN_DEGREES_INT = 360;
+
+/** Query parameters carried by a join link. */
+const ROOM_PARAM_STR = 'r';
+const RELAY_PARAM_STR = 's';
+
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Fold an angle into the range 0 to 359 degrees.
+ *
+ * Arguments:
+ *   degrees_any (number): Any angle, possibly negative or over a turn.
+ *
+ * Returns:
+ *   (number): The equivalent angle in [0, 360).
+ */
+function normaliseDegrees(degrees_any) {
+  const rounded_int = Math.round(Number(degrees_any) || 0);
+  return ((rounded_int % FULL_TURN_DEGREES_INT) + FULL_TURN_DEGREES_INT) %
+    FULL_TURN_DEGREES_INT;
+}
+
+/**
+ * Describe this device in one word, for the peer list.
+ *
+ * Brief:
+ *   A platform name, not a fingerprint. The list has to let someone tell
+ *   their phone from their laptop, and nothing more than that.
+ *
+ * Arguments:
+ *   (none)
+ *
+ * Returns:
+ *   (string): A short platform name.
+ */
+function describePlatform() {
+  const user_agent_str = navigator.userAgent;
+
+  if (/iPhone|iPad/.test(user_agent_str)) {
+    return 'iOS';
+  }
+  if (/Android/.test(user_agent_str)) {
+    return 'Android';
+  }
+  if (/Mac/.test(user_agent_str)) {
+    return 'macOS';
+  }
+  if (/Windows/.test(user_agent_str)) {
+    return 'Windows';
+  }
+  if (/Linux/.test(user_agent_str)) {
+    return 'Linux';
+  }
+  return 'device';
+}
+
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Add this device's phase offset to every mirrored channel.
+ *
+ * Brief:
+ *   Kept pure and exported so the one thing that has to be right about it
+ *   can be asserted directly: the offset must be written under the key the
+ *   channel deserialiser reads. Writing it under any other name leaves the
+ *   node playing at the master's phase, which looks exactly like success -
+ *   tones play, devices are in sync, and the cancellation simply never
+ *   happens.
+ *
+ * Arguments:
+ *   channel_states_list (Array<Object>|null): The master's channel states.
+ *   phase_degrees_int (number): This device's offset, in degrees.
+ *
+ * Returns:
+ *   (Array<Object>): Channel states with the offset folded in.
+ */
+export function foldPhaseIntoChannels(
+  channel_states_list,
+  phase_degrees_int
+) {
+  return (channel_states_list ?? []).map((channel_state_obj) => ({
+    ...channel_state_obj,
+    phase_degrees_int: normaliseDegrees(
+      (channel_state_obj.phase_degrees_int ?? 0) + phase_degrees_int
+    ),
+  }));
+}
+
+/* ------------------------------------------------------------------------ */
+
+/**
+ * A multi-device Concert Mode session.
+ *
+ * Brief:
+ *   Owns the role, the room, the peer list and the clock offset. Every
+ *   scheduled event is expressed in master time and converted locally, so
+ *   the only clock that matters on each device is its own sample clock.
+ *
+ * Arguments:
+ *   app_obj (Object): The application facade.
+ *
+ * Returns:
+ *   (ConcertMode): The constructed session, initially solo.
+ */
 export class ConcertMode extends Emitter {
-  role = ROLE.SOLO;
-  room = null;
-  id = makePeerId();
-  transport = null;
+  role_str = ROLE.SOLO;
+  room_code_str = null;
+  peer_id_str = makePeerId();
+  transport_obj = null;
 
-  /** Master-clock offset in ms: masterTime = localTime + offsetMs */
-  offsetMs = 0;
-  rttMs = 0;
-  phaseDeg = 0;
+  /** Master-clock offset: master time equals local time plus this. */
+  offset_ms_float = 0;
+  rtt_ms_float = 0;
+  phase_degrees_int = 0;
 
-  /** @type {Map<string, {id:string, role:string, lastSeen:number, rttMs:number, phaseDeg:number, ua:string}>} */
-  peers = new Map();
+  peers_map = new Map();
 
-  #probes = [];
-  #lastState = null;
-  #pending = new Map();
-  #probeTimer = null;
-  #resyncTimer = null;
-  #heartbeat = null;
+  #probes_list = [];
+  #last_state_obj = null;
+  #pending_probes_map = new Map();
+  #probe_timer_int = null;
+  #resync_timer_int = null;
+  #heartbeat_timer_int = null;
 
-  constructor(app) {
+  constructor(app_obj) {
     super();
-    this.app = app;
+    this.app_obj = app_obj;
   }
 
-  get connected() {
-    return !!this.transport?.connected;
+  /** True while a transport is connected. */
+  get is_connected_bool() {
+    return Boolean(this.transport_obj?.is_connected_bool);
   }
 
-  get peerCount() {
-    return this.peers.size;
+  /** How many other devices are currently in the room. */
+  get peer_count_int() {
+    return this.peers_map.size;
   }
 
-  /** Local monotonic clock, in milliseconds. */
+  /**
+   * Read this device's monotonic clock.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (number): Milliseconds since this page's time origin.
+   */
   now() {
     return performance.now();
   }
 
-  /** The same instant expressed on the master's clock. */
+  /**
+   * Read the current instant on the master's clock.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (number): Milliseconds on the master's timeline.
+   */
   masterNow() {
-    return this.now() + this.offsetMs;
+    return this.now() + this.offset_ms_float;
   }
 
-  /** Convert a master-clock timestamp into this device's AudioContext time. */
-  toAudioTime(masterMs) {
-    const localMs = masterMs - this.offsetMs;
-    return this.app.engine.currentTimeSeconds + (localMs - this.now()) / 1000;
+  /**
+   * Convert a master-clock timestamp into this device's audio time.
+   *
+   * Arguments:
+   *   master_ms_float (number): An instant on the master's clock.
+   *
+   * Returns:
+   *   (number): The same instant on this AudioContext's timeline.
+   */
+  toAudioTime(master_ms_float) {
+    const local_ms_float = master_ms_float - this.offset_ms_float;
+    return this.app_obj.engine.currentTimeSeconds +
+      (local_ms_float - this.now()) / 1000;
   }
 
   /* ===================================================================
@@ -87,72 +264,128 @@ export class ConcertMode extends Emitter {
 
   /**
    * Become the master of a new room.
-   * @param {{kind?:string, relayUrl?:string, room?:string}} opts
+   *
+   * Arguments:
+   *   options_obj (Object): { kind_str, relay_url_str, room_code_str }.
+   *
+   * Returns:
+   *   (Promise<ConcertMode>): This session, once hosting.
    */
-  async host({ kind = 'local', relayUrl = null, room = null } = {}) {
-    await this.leave({ silent: true });
+  async host(options_obj = {}) {
+    const {
+      kind_str = 'local',
+      relay_url_str = null,
+      room_code_str = null,
+    } = options_obj;
 
-    this.role = ROLE.MASTER;
-    this.room = room || makeRoomCode();
-    this.offsetMs = 0;
-    this.rttMs = 0;
+    await this.leave({ is_silent_bool: true });
 
-    this.transport = createTransport(kind, { room: this.room, id: this.id, relayUrl });
-    this.#bind();
-    await this.transport.connect();
+    this.role_str = ROLE.MASTER;
+    this.room_code_str = room_code_str || makeRoomCode();
+    this.offset_ms_float = 0;
+    this.rtt_ms_float = 0;
+
+    this.transport_obj = createTransport(kind_str, {
+      room_code_str: this.room_code_str,
+      peer_id_str: this.peer_id_str,
+      relay_url_str,
+    });
+    this.#bindTransport();
+    await this.transport_obj.connect();
 
     this.#startHeartbeat();
-    this.transport.publish({ t: 'hello', role: this.role, ua: shortUA() });
-    this.emit('role', this.role);
-    this.emit('room', this.room);
+    this.transport_obj.publish({
+      t: 'hello', role: this.role_str, ua: describePlatform(),
+    });
+    this.emit('role', this.role_str);
+    this.emit('room', this.room_code_str);
     return this;
   }
 
   /**
    * Join an existing room as a secondary node.
+   *
+   * Arguments:
+   *   room_code_str (string): The room code from the master device.
+   *   options_obj (Object): { kind_str, relay_url_str }.
+   *
+   * Returns:
+   *   (Promise<ConcertMode>): This session, once joined.
+   *
+   * Warning:
+   *   Synchronisation starts immediately; the offset is meaningless until
+   *   the first burst settles, roughly two seconds later.
    */
-  async join(room, { kind = 'local', relayUrl = null } = {}) {
-    if (!room) throw new Error('A room code is required.');
-    await this.leave({ silent: true });
+  async join(room_code_str, options_obj = {}) {
+    const { kind_str = 'local', relay_url_str = null } = options_obj;
+    if (!room_code_str) {
+      throw new Error('A room code is required.');
+    }
+    await this.leave({ is_silent_bool: true });
 
-    this.role = ROLE.NODE;
-    this.room = String(room).toUpperCase().trim();
+    this.role_str = ROLE.NODE;
+    this.room_code_str = String(room_code_str).toUpperCase().trim();
 
-    this.transport = createTransport(kind, { room: this.room, id: this.id, relayUrl });
-    this.#bind();
-    await this.transport.connect();
+    this.transport_obj = createTransport(kind_str, {
+      room_code_str: this.room_code_str,
+      peer_id_str: this.peer_id_str,
+      relay_url_str,
+    });
+    this.#bindTransport();
+    await this.transport_obj.connect();
 
-    this.transport.publish({ t: 'hello', role: this.role, ua: shortUA(), phaseDeg: this.phaseDeg });
+    this.transport_obj.publish({
+      t: 'hello',
+      role: this.role_str,
+      ua: describePlatform(),
+      phaseDeg: this.phase_degrees_int,
+    });
     this.#startHeartbeat();
     this.resync();
 
-    this.emit('role', this.role);
-    this.emit('room', this.room);
+    this.emit('role', this.role_str);
+    this.emit('room', this.room_code_str);
     return this;
   }
 
-  async leave({ silent = false } = {}) {
-    clearInterval(this.#probeTimer);
-    clearInterval(this.#resyncTimer);
-    clearInterval(this.#heartbeat);
-    this.#probeTimer = this.#resyncTimer = this.#heartbeat = null;
-    this.#pending.clear();
-    this.#probes = [];
+  /**
+   * Leave the room and return to solo.
+   *
+   * Arguments:
+   *   options_obj (Object): { is_silent_bool } to suppress the events.
+   *
+   * Returns:
+   *   (Promise<ConcertMode>): This session.
+   */
+  async leave(options_obj = {}) {
+    const { is_silent_bool = false } = options_obj;
 
-    if (this.transport) {
+    clearInterval(this.#probe_timer_int);
+    clearInterval(this.#resync_timer_int);
+    clearInterval(this.#heartbeat_timer_int);
+    this.#probe_timer_int = null;
+    this.#resync_timer_int = null;
+    this.#heartbeat_timer_int = null;
+    this.#pending_probes_map.clear();
+    this.#probes_list = [];
+
+    if (this.transport_obj) {
       try {
-        this.transport.publish({ t: 'bye' });
-        this.transport.close();
-      } catch {}
-      this.transport = null;
+        this.transport_obj.publish({ t: 'bye' });
+        this.transport_obj.close();
+      } catch {
+        // Already gone; nothing to announce to.
+      }
+      this.transport_obj = null;
     }
 
-    this.peers.clear();
-    this.role = ROLE.SOLO;
-    this.room = null;
-    this.offsetMs = 0;
-    if (!silent) {
-      this.emit('role', this.role);
+    this.peers_map.clear();
+    this.role_str = ROLE.SOLO;
+    this.room_code_str = null;
+    this.offset_ms_float = 0;
+
+    if (!is_silent_bool) {
+      this.emit('role', this.role_str);
       this.emit('peers', []);
     }
     return this;
@@ -162,126 +395,249 @@ export class ConcertMode extends Emitter {
      Messaging
      =================================================================== */
 
-  #bind() {
-    const t = this.transport;
-    t.on('message', (msg) => this.#onMessage(msg));
-    t.on('open', (info) => this.emit('open', info));
-    t.on('close', () => this.emit('closed'));
-    t.on('rtcstate', (s) => this.emit('rtcstate', s));
+  /**
+   * Forward the transport's events onto this session.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
+  #bindTransport() {
+    const transport_obj = this.transport_obj;
+    transport_obj.on(
+      'message', (message_obj) => this.#onMessage(message_obj)
+    );
+    transport_obj.on('open', (info_obj) => this.emit('open', info_obj));
+    transport_obj.on('close', () => this.emit('closed'));
+    transport_obj.on(
+      'rtcstate', (state_str) => this.emit('rtcstate', state_str)
+    );
   }
 
+  /**
+   * Announce presence and drop peers that have gone quiet.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
   #startHeartbeat() {
-    this.#heartbeat = setInterval(() => {
-      this.transport?.publish({ t: 'beat', role: this.role, phaseDeg: this.phaseDeg });
-      const cutoff = this.now() - PEER_TIMEOUT;
-      let dropped = false;
-      for (const [id, p] of this.peers) {
-        if (p.lastSeen < cutoff) { this.peers.delete(id); dropped = true; }
+    this.#heartbeat_timer_int = setInterval(() => {
+      this.transport_obj?.publish({
+        t: 'beat', role: this.role_str, phaseDeg: this.phase_degrees_int,
+      });
+
+      const cutoff_ms_float = this.now() - PEER_TIMEOUT_MS_INT;
+      let has_dropped_bool = false;
+      for (const [peer_id_str, peer_obj] of this.peers_map) {
+        if (peer_obj.lastSeen < cutoff_ms_float) {
+          this.peers_map.delete(peer_id_str);
+          has_dropped_bool = true;
+        }
       }
-      if (dropped) this.emit('peers', [...this.peers.values()]);
-    }, 3000);
+      if (has_dropped_bool) {
+        this.emit('peers', [...this.peers_map.values()]);
+      }
+    }, HEARTBEAT_INTERVAL_MS_INT);
   }
 
-  #touch(msg, extra = {}) {
-    const existing = this.peers.get(msg.from);
-    const peer = {
-      id: msg.from,
-      role: msg.role ?? existing?.role ?? 'node',
-      ua: msg.ua ?? existing?.ua ?? '',
-      rttMs: existing?.rttMs ?? 0,
-      phaseDeg: msg.phaseDeg ?? existing?.phaseDeg ?? 0,
-      ...existing,
-      ...extra,
+  /**
+   * Record that a peer was heard from.
+   *
+   * Arguments:
+   *   message_obj (Object): The message that carried the news.
+   *   extra_obj (Object): Fields to merge over the stored record.
+   *
+   * Returns:
+   *   (Object): The updated peer record.
+   */
+  #touchPeer(message_obj, extra_obj = {}) {
+    const existing_obj = this.peers_map.get(message_obj.from);
+    const peer_obj = {
+      id: message_obj.from,
+      role: message_obj.role ?? existing_obj?.role ?? 'node',
+      ua: message_obj.ua ?? existing_obj?.ua ?? '',
+      rttMs: existing_obj?.rttMs ?? 0,
+      phaseDeg: message_obj.phaseDeg ?? existing_obj?.phaseDeg ?? 0,
+      ...existing_obj,
+      ...extra_obj,
       lastSeen: this.now(),
     };
-    this.peers.set(msg.from, peer);
-    return peer;
+    this.peers_map.set(message_obj.from, peer_obj);
+    return peer_obj;
   }
 
-  #onMessage(msg) {
-    switch (msg.t) {
-      /* --- presence ------------------------------------------------- */
-      case 'hello': {
-        this.#touch(msg);
-        this.emit('peers', [...this.peers.values()]);
-        // Announce ourselves back so the newcomer learns about us too.
-        this.transport.publish({ t: 'beat', role: this.role, ua: shortUA(), phaseDeg: this.phaseDeg });
-        if (this.role === ROLE.MASTER) this.broadcastState();
-        break;
-      }
+  /**
+   * Handle a presence message.
+   *
+   * Arguments:
+   *   message_obj (Object): A hello, beat or bye message.
+   *
+   * Returns:
+   *   (none)
+   */
+  #onPresence(message_obj) {
+    if (message_obj.t === 'bye') {
+      this.peers_map.delete(message_obj.from);
+      this.emit('peers', [...this.peers_map.values()]);
+      return;
+    }
 
-      case 'beat': {
-        this.#touch(msg);
-        this.emit('peers', [...this.peers.values()]);
-        break;
-      }
+    this.#touchPeer(message_obj);
+    this.emit('peers', [...this.peers_map.values()]);
 
-      case 'bye': {
-        this.peers.delete(msg.from);
-        this.emit('peers', [...this.peers.values()]);
-        break;
-      }
+    if (message_obj.t !== 'hello') {
+      return;
+    }
+    // Announce ourselves back so the newcomer learns about us too.
+    this.transport_obj.publish({
+      t: 'beat',
+      role: this.role_str,
+      ua: describePlatform(),
+      phaseDeg: this.phase_degrees_int,
+    });
+    if (this.role_str === ROLE.MASTER) {
+      this.broadcastState();
+    }
+  }
 
-      /* --- clock synchronisation ------------------------------------ */
-      case 'probe': {
-        // Only the master answers probes; it stamps its own clock.
-        if (this.role !== ROLE.MASTER) break;
-        this.transport.publish({ t: 'probe-reply', to: msg.from, seq: msg.seq, c0: msg.c0, c1: this.now() });
-        break;
+  /**
+   * Handle one half of the clock exchange.
+   *
+   * Arguments:
+   *   message_obj (Object): A probe or probe-reply message.
+   *
+   * Returns:
+   *   (none)
+   */
+  #onClockMessage(message_obj) {
+    if (message_obj.t === 'probe') {
+      // Only the master answers probes; it stamps its own clock.
+      if (this.role_str !== ROLE.MASTER) {
+        return;
       }
+      this.transport_obj.publish({
+        t: 'probe-reply',
+        to: message_obj.from,
+        seq: message_obj.seq,
+        c0: message_obj.c0,
+        c1: this.now(),
+      });
+      return;
+    }
 
-      case 'probe-reply': {
-        if (msg.to !== this.id) break;
-        const sent = this.#pending.get(msg.seq);
-        if (sent === undefined) break;
-        this.#pending.delete(msg.seq);
+    if (message_obj.to !== this.peer_id_str) {
+      return;
+    }
+    const sent_ms_float = this.#pending_probes_map.get(message_obj.seq);
+    if (sent_ms_float === undefined) {
+      return;
+    }
+    this.#pending_probes_map.delete(message_obj.seq);
 
-        const c2 = this.now();
-        const rtt = c2 - sent;
-        // Classic NTP estimator: assume the two legs are symmetric.
-        const offset = msg.c1 - (sent + c2) / 2;
-        this.#probes.push({ offset, rtt });
-        this.emit('probe', { offset, rtt, count: this.#probes.length });
+    const received_ms_float = this.now();
+    const rtt_ms_float = received_ms_float - sent_ms_float;
+    // Classic NTP estimator: assume the two legs are symmetric.
+    const offset_ms_float =
+      message_obj.c1 - (sent_ms_float + received_ms_float) / 2;
+
+    this.#probes_list.push({ offset_ms_float, rtt_ms_float });
+    this.emit('probe', {
+      offset: offset_ms_float,
+      rtt: rtt_ms_float,
+      count: this.#probes_list.length,
+    });
+  }
+
+  /**
+   * Handle a control message from the master.
+   *
+   * Arguments:
+   *   message_obj (Object): A state, script, schedule or stop message.
+   *
+   * Returns:
+   *   (none)
+   *
+   * Warning:
+   *   Only a node acts on these. A master ignoring them is what stops two
+   *   masters in one room from driving each other in a loop.
+   */
+  #onControl(message_obj) {
+    if (this.role_str !== ROLE.NODE) {
+      return;
+    }
+
+    switch (message_obj.t) {
+      case 'state':
+        this.#applyState(message_obj.state);
         break;
-      }
 
-      /* --- control -------------------------------------------------- */
-      case 'state': {
-        if (this.role !== ROLE.NODE) break;
-        this.#applyState(msg.state);
+      case 'script':
+        this.emit('remote-script', message_obj);
+        this.app_obj.runScript(message_obj.source, {
+          label_str: `concert:${message_obj.label ?? 'remote'}`,
+        });
         break;
-      }
 
-      case 'script': {
-        if (this.role !== ROLE.NODE) break;
-        this.emit('remote-script', msg);
-        this.app.runScript(msg.source, { label: `concert:${msg.label ?? 'remote'}` });
+      case 'schedule':
+        this.#playScheduled(message_obj);
         break;
-      }
 
-      case 'schedule': {
-        if (this.role !== ROLE.NODE) break;
-        this.#playScheduled(msg);
+      case 'stop':
+        this.app_obj.rack.stopAllChannels();
+        this.app_obj.noise.stop();
+        this.app_obj.vm.stop();
         break;
-      }
-
-      case 'stop': {
-        if (this.role !== ROLE.NODE) break;
-        this.app.rack.stopAllChannels();
-        this.app.noise.stop();
-        this.app.vm.stop();
-        break;
-      }
-
-      case 'phase': {
-        // The master can set a specific node's phase offset remotely.
-        if (msg.to && msg.to !== this.id) break;
-        this.setPhaseDegrees(msg.deg, { propagate: false });
-        break;
-      }
 
       default:
-        this.emit('message', msg);
+        break;
+    }
+  }
+
+  /**
+   * Route one inbound message to its handler.
+   *
+   * Arguments:
+   *   message_obj (Object): The decoded message.
+   *
+   * Returns:
+   *   (none)
+   */
+  #onMessage(message_obj) {
+    switch (message_obj.t) {
+      case 'hello':
+      case 'beat':
+      case 'bye':
+        this.#onPresence(message_obj);
+        break;
+
+      case 'probe':
+      case 'probe-reply':
+        this.#onClockMessage(message_obj);
+        break;
+
+      case 'state':
+      case 'script':
+      case 'schedule':
+      case 'stop':
+        this.#onControl(message_obj);
+        break;
+
+      case 'phase':
+        // The master can set a specific node's phase offset remotely.
+        if (!message_obj.to || message_obj.to === this.peer_id_str) {
+          this.setPhaseDegrees(
+            message_obj.deg, { should_propagate_bool: false }
+          );
+        }
+        break;
+
+      default:
+        this.emit('message', message_obj);
     }
   }
 
@@ -289,94 +645,195 @@ export class ConcertMode extends Emitter {
      Clock synchronisation
      =================================================================== */
 
-  /** Run a burst of probes and adopt the median offset. */
+  /**
+   * Run a burst of probes and adopt the median offset.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (ConcertMode): This session, for chaining.
+   *
+   * Warning:
+   *   Only a connected node synchronises. The master is the reference and
+   *   has nothing to synchronise against.
+   */
   resync() {
-    if (this.role !== ROLE.NODE || !this.connected) return this;
+    if (this.role_str !== ROLE.NODE || !this.is_connected_bool) {
+      return this;
+    }
 
-    clearInterval(this.#probeTimer);
-    this.#probes = [];
-    this.#pending.clear();
+    clearInterval(this.#probe_timer_int);
+    this.#probes_list = [];
+    this.#pending_probes_map.clear();
 
-    let seq = 0;
+    let sequence_int = 0;
     this.emit('syncing', true);
 
-    this.#probeTimer = setInterval(() => {
-      if (seq >= PROBE_COUNT) {
-        clearInterval(this.#probeTimer);
-        this.#probeTimer = null;
+    this.#probe_timer_int = setInterval(() => {
+      if (sequence_int >= PROBE_COUNT_INT) {
+        clearInterval(this.#probe_timer_int);
+        this.#probe_timer_int = null;
         this.#settleSync();
         return;
       }
-      const s = seq++;
-      const c0 = this.now();
-      this.#pending.set(s, c0);
-      this.transport.publish({ t: 'probe', seq: s, c0 });
-    }, PROBE_INTERVAL);
+      const this_sequence_int = sequence_int++;
+      const sent_ms_float = this.now();
+      this.#pending_probes_map.set(this_sequence_int, sent_ms_float);
+      this.transport_obj.publish({
+        t: 'probe', seq: this_sequence_int, c0: sent_ms_float,
+      });
+    }, PROBE_INTERVAL_MS_INT);
 
-    clearInterval(this.#resyncTimer);
-    this.#resyncTimer = setInterval(() => this.resync(), RESYNC_INTERVAL);
+    clearInterval(this.#resync_timer_int);
+    this.#resync_timer_int = setInterval(
+      () => this.resync(), RESYNC_INTERVAL_MS_INT
+    );
     return this;
   }
 
+  /**
+   * Adopt an offset from the completed probe burst.
+   *
+   * Brief:
+   *   The slowest half of the probes is discarded. A probe that hit a
+   *   scheduler stall carries a badly asymmetric round trip and therefore a
+   *   correspondingly wrong offset, and the median alone does not remove it
+   *   when several probes stall together.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (none)
+   */
   #settleSync() {
     this.emit('syncing', false);
-    if (!this.#probes.length) {
+    if (!this.#probes_list.length) {
       this.emit('syncfail', 'No reply from the master node.');
       return;
     }
 
-    // Discard the slowest half: a probe that hit a scheduler stall carries a
-    // badly asymmetric round trip and a correspondingly wrong offset.
-    const sorted = [...this.#probes].sort((a, b) => a.rtt - b.rtt);
-    const best = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2)));
+    const sorted_list = [...this.#probes_list].sort(
+      (first_obj, second_obj) =>
+        first_obj.rtt_ms_float - second_obj.rtt_ms_float
+    );
+    const best_list = sorted_list.slice(
+      0, Math.max(1, Math.ceil(sorted_list.length / 2))
+    );
 
-    this.offsetMs = computeMedian(best.map((p) => p.offset));
-    this.rttMs = computeMedian(best.map((p) => p.rtt));
+    this.offset_ms_float = computeMedian(
+      best_list.map((probe_obj) => probe_obj.offset_ms_float)
+    );
+    this.rtt_ms_float = computeMedian(
+      best_list.map((probe_obj) => probe_obj.rtt_ms_float)
+    );
 
-    this.emit('sync', { offsetMs: this.offsetMs, rttMs: this.rttMs, samples: best.length });
+    this.emit('sync', {
+      offsetMs: this.offset_ms_float,
+      rttMs: this.rtt_ms_float,
+      samples: best_list.length,
+    });
   }
 
   /* ===================================================================
      Master broadcasts
      =================================================================== */
 
-  /** Mirror the master's full channel + noise state to every node. */
+  /**
+   * Mirror the master's full channel and noise state to every node.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (boolean): False when this device is not a connected master.
+   */
   broadcastState() {
-    if (this.role !== ROLE.MASTER || !this.connected) return false;
-    return this.transport.publish({
+    if (this.role_str !== ROLE.MASTER || !this.is_connected_bool) {
+      return false;
+    }
+    return this.transport_obj.publish({
       t: 'state',
       state: {
-        channels: this.app.rack.toJSON(),
-        noise: this.app.noise.toJSON(),
-        masterDb: this.app.engine.masterLevelDb,
-        a4: this.app.tuning.referenceHertz,
+        channels: this.app_obj.rack.toJSON(),
+        noise: this.app_obj.noise.toJSON(),
+        masterDb: this.app_obj.engine.masterLevelDb,
+        a4: this.app_obj.tuning.referenceHertz,
       },
     });
   }
 
-  /** Ask every node to run a script. */
-  broadcastScript(source, label = 'remote') {
-    if (this.role !== ROLE.MASTER || !this.connected) return false;
-    return this.transport.publish({ t: 'script', source, label });
+  /**
+   * Ask every node to run a script.
+   *
+   * Arguments:
+   *   source_str (string): The script source.
+   *   label_str (string): Name shown in each node's terminal.
+   *
+   * Returns:
+   *   (boolean): False when this device is not a connected master.
+   */
+  broadcastScript(source_str, label_str = 'remote') {
+    if (this.role_str !== ROLE.MASTER || !this.is_connected_bool) {
+      return false;
+    }
+    return this.transport_obj.publish({
+      t: 'script', source: source_str, label: label_str,
+    });
   }
 
   /**
    * Schedule a tone to begin on every node at the same instant.
-   * `leadMs` must exceed the worst round trip, or slow nodes miss the window.
+   *
+   * Arguments:
+   *   options_obj (Object): { freq, durationMs, waveform, gainDb, leadMs }.
+   *
+   * Returns:
+   *   (number|false): The master-clock start time, or false if not master.
+   *
+   * Warning:
+   *   leadMs must exceed the worst round trip in the room, or slow nodes
+   *   receive the instruction after the moment it names and drop it.
    */
-  scheduleTone({ freq, durationMs = 1000, waveform = 'sine', gainDb = -14, leadMs = 600 }) {
-    if (this.role !== ROLE.MASTER || !this.connected) return false;
-    const at = this.masterNow() + leadMs;
-    const payload = { t: 'schedule', at, freq, durationMs, waveform, gainDb };
-    this.transport.publish(payload);
+  scheduleTone(options_obj) {
+    const {
+      freq,
+      durationMs = 1000,
+      waveform = 'sine',
+      gainDb = -14,
+      leadMs = DEFAULT_LEAD_MS_INT,
+    } = options_obj;
+
+    if (this.role_str !== ROLE.MASTER || !this.is_connected_bool) {
+      return false;
+    }
+
+    const at_ms_float = this.masterNow() + leadMs;
+    const payload_obj = {
+      t: 'schedule', at: at_ms_float, freq, durationMs, waveform, gainDb,
+    };
+    this.transport_obj.publish(payload_obj);
+
     // The master honours its own instruction, so it is one of the voices.
-    this.#playScheduled(payload);
-    return at;
+    this.#playScheduled(payload_obj);
+    return at_ms_float;
   }
 
+  /**
+   * Ask every node to fall silent.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (boolean): False when this device is not a connected master.
+   */
   broadcastStop() {
-    if (this.role !== ROLE.MASTER || !this.connected) return false;
-    return this.transport.publish({ t: 'stop' });
+    if (this.role_str !== ROLE.MASTER || !this.is_connected_bool) {
+      return false;
+    }
+    return this.transport_obj.publish({ t: 'stop' });
   }
 
   /* ===================================================================
@@ -384,117 +841,267 @@ export class ConcertMode extends Emitter {
      =================================================================== */
 
   /**
-   * Set this device's phase offset. Applied on top of every channel's own
-   * phase, which is what makes a room full of phones into an interference
-   * experiment rather than a chorus.
+   * Set this device's phase offset.
+   *
+   * Brief:
+   *   Applied on top of every channel's own phase, which is what turns a
+   *   room full of phones into an interference experiment rather than a
+   *   chorus.
+   *
+   * Arguments:
+   *   degrees_any (number): Offset in degrees; folded into 0-359.
+   *   options_obj (Object): { should_propagate_bool }.
+   *
+   * Returns:
+   *   (ConcertMode): This session, for chaining.
+   *
+   * Warning:
+   *   The offset is re-folded into the last mirrored state rather than
+   *   nudging the live channels, so repeated changes stay relative to the
+   *   master's phases instead of compounding on themselves.
    */
-  setPhase(deg, { propagate = true } = {}) {
-    this.phaseDeg = ((Math.round(Number(deg) || 0) % 360) + 360) % 360;
+  setPhaseDegrees(degrees_any, options_obj = {}) {
+    const { should_propagate_bool = true } = options_obj;
+    this.phase_degrees_int = normaliseDegrees(degrees_any);
 
-    // Re-fold the offset into the last mirrored state rather than nudging the
-    // live channels, so repeated changes stay relative to the master's phases
-    // instead of compounding on themselves.
-    if (this.role === ROLE.NODE && this.#lastState) this.#applyState(this.#lastState);
-
-    if (propagate && this.connected) {
-      this.transport.publish({ t: 'beat', role: this.role, phaseDeg: this.phaseDeg });
+    if (this.role_str === ROLE.NODE && this.#last_state_obj) {
+      this.#applyState(this.#last_state_obj);
     }
-    this.emit('phase', this.phaseDeg);
+    if (should_propagate_bool && this.is_connected_bool) {
+      this.transport_obj.publish({
+        t: 'beat', role: this.role_str, phaseDeg: this.phase_degrees_int,
+      });
+    }
+    this.emit('phase', this.phase_degrees_int);
     return this;
   }
 
-  /** Master-side: push a phase offset to one node. */
-  setPeerPhase(peerId, deg) {
-    if (this.role !== ROLE.MASTER || !this.connected) return false;
-    const p = this.peers.get(peerId);
-    if (p) { p.phaseDeg = ((deg % 360) + 360) % 360; this.emit('peers', [...this.peers.values()]); }
-    return this.transport.publish({ t: 'phase', to: peerId, deg });
+  /**
+   * Push a phase offset to one node.
+   *
+   * Arguments:
+   *   peer_id_str (string): The node to address.
+   *   degrees_any (number): Offset in degrees.
+   *
+   * Returns:
+   *   (boolean): False when this device is not a connected master.
+   */
+  setPeerPhase(peer_id_str, degrees_any) {
+    if (this.role_str !== ROLE.MASTER || !this.is_connected_bool) {
+      return false;
+    }
+
+    const peer_obj = this.peers_map.get(peer_id_str);
+    if (peer_obj) {
+      peer_obj.phaseDeg = normaliseDegrees(degrees_any);
+      this.emit('peers', [...this.peers_map.values()]);
+    }
+    return this.transport_obj.publish({
+      t: 'phase', to: peer_id_str, deg: degrees_any,
+    });
   }
 
-  #applyState(state) {
-    if (!state) return;
-    this.#lastState = state;
-    if (Number.isFinite(state.a4)) this.app.tuning.referenceHertz = state.a4;
-    if (Number.isFinite(state.masterDb)) this.app.engine.masterLevelDb = state.masterDb;
+  /**
+   * Adopt the master's mirrored state, folding in this node's phase.
+   *
+   * Arguments:
+   *   state_obj (Object): The master's serialised state.
+   *
+   * Returns:
+   *   (none)
+   *
+   * Warning:
+   *   The per-channel phase must be written under the same key the channel
+   *   deserialiser reads, or the node's offset is silently dropped and
+   *   every device plays at the master's phase.
+   */
+  #applyState(state_obj) {
+    if (!state_obj) {
+      return;
+    }
+    this.#last_state_obj = state_obj;
 
-    // Channels inherit the master's parameters, then this node's own phase
-    // offset is folded in on top.
-    const channels = (state.channels ?? []).map((c) => ({
-      ...c,
-      phaseDeg: (((c.phase_degrees_int ?? 0) + this.phaseDeg) % 360 + 360) % 360,
-    }));
-    this.app.rack.fromJSON(channels);
-    if (state.noise) this.app.noise.fromJSON(state.noise);
-    this.app.syncUi?.();
-    this.emit('mirrored', state);
+    if (Number.isFinite(state_obj.a4)) {
+      this.app_obj.tuning.referenceHertz = state_obj.a4;
+    }
+    if (Number.isFinite(state_obj.masterDb)) {
+      this.app_obj.engine.masterLevelDb = state_obj.masterDb;
+    }
+
+    this.app_obj.rack.fromJSON(
+      foldPhaseIntoChannels(state_obj.channels, this.phase_degrees_int)
+    );
+    if (state_obj.noise) {
+      this.app_obj.noise.fromJSON(state_obj.noise);
+    }
+    this.app_obj.syncUi?.();
+    this.emit('mirrored', state_obj);
   }
 
-  #playScheduled({ at, freq, durationMs, waveform, gainDb }) {
-    const when = this.toAudioTime(at);
-    const engine = this.app.engine;
-    const ctx = engine.context_obj;
-    const lead = when - engine.currentTimeSeconds;
+  /**
+   * Play a tone the master scheduled, on this device's sample clock.
+   *
+   * Arguments:
+   *   message_obj (Object): { at, freq, durationMs, waveform, gainDb }.
+   *
+   * Returns:
+   *   (none)
+   *
+   * Warning:
+   *   An instruction that arrives after the moment it names is dropped, not
+   *   played late. Playing it late would be worse than not playing it: the
+   *   whole point is that every device sounds at the same instant.
+   */
+  #playScheduled(message_obj) {
+    const { at, freq, durationMs, waveform, gainDb } = message_obj;
+    const engine_obj = this.app_obj.engine;
+    const when_seconds_float = this.toAudioTime(at);
+    const lead_seconds_float =
+      when_seconds_float - engine_obj.currentTimeSeconds;
 
-    if (lead < -0.05) {
-      this.emit('late', { byMs: -lead * 1000 });
+    if (lead_seconds_float < -LATE_TOLERANCE_SECONDS_FLOAT) {
+      this.emit('late', { byMs: -lead_seconds_float * 1000 });
       return;
     }
 
-    const start = Math.max(when, engine.currentTimeSeconds + 0.005);
-    const durSec = durationMs / 1000;
+    const start_seconds_float = Math.max(
+      when_seconds_float,
+      engine_obj.currentTimeSeconds + MIN_START_LEAD_SECONDS_FLOAT
+    );
+    this.#buildScheduledVoice({
+      start_seconds_float,
+      duration_seconds_float: durationMs / 1000,
+      frequency_hertz_float: freq,
+      waveform_name_str: waveform,
+      gain_db_float: gainDb,
+    });
 
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    // The device phase offset is what makes multi-node cancellation testable.
-    applyWaveform(osc, waveform, this.phaseDeg);
-    osc.frequency.setValueAtTime(clampToRange(freq, 0.01, ctx.sampleRate / 2 - 1), start);
+    this.emit('scheduled', {
+      freq, at, leadMs: lead_seconds_float * 1000,
+    });
+  }
 
-    const amp = 10 ** (gainDb / 20);
-    g.gain.setValueAtTime(0, start);
-    g.gain.linearRampToValueAtTime(amp, start + 0.006);
-    g.gain.setValueAtTime(amp, start + Math.max(0.01, durSec - 0.02));
-    g.gain.linearRampToValueAtTime(0, start + durSec);
+  /**
+   * Build and start one scheduled voice.
+   *
+   * Arguments:
+   *   spec_obj (Object): Start, duration, frequency, waveform and level.
+   *
+   * Returns:
+   *   (none)
+   *
+   * Warning:
+   *   This device's phase offset is applied here. It is what makes
+   *   multi-node cancellation testable rather than theoretical.
+   */
+  #buildScheduledVoice(spec_obj) {
+    const {
+      start_seconds_float,
+      duration_seconds_float,
+      frequency_hertz_float,
+      waveform_name_str,
+      gain_db_float,
+    } = spec_obj;
 
-    osc.connect(g);
-    g.connect(engine.channel_bus_node);
-    osc.start(start);
-    osc.stop(start + durSec + 0.03);
-    osc.onended = () => { try { osc.disconnect(); g.disconnect(); } catch {} };
+    const engine_obj = this.app_obj.engine;
+    const ctx = engine_obj.context_obj;
+    const oscillator_node = ctx.createOscillator();
+    const gain_node = ctx.createGain();
 
-    this.emit('scheduled', { freq, at, leadMs: lead * 1000 });
+    applyWaveform(
+      oscillator_node, waveform_name_str, this.phase_degrees_int
+    );
+    oscillator_node.frequency.setValueAtTime(
+      clampToRange(frequency_hertz_float, 0.01, ctx.sampleRate / 2 - 1),
+      start_seconds_float
+    );
+
+    const amplitude_float = 10 ** (gain_db_float / 20);
+    const sustain_seconds_float = Math.max(
+      SCHEDULED_MIN_SUSTAIN_SECONDS_FLOAT,
+      duration_seconds_float - SCHEDULED_RELEASE_SECONDS_FLOAT
+    );
+    gain_node.gain.setValueAtTime(0, start_seconds_float);
+    gain_node.gain.linearRampToValueAtTime(
+      amplitude_float,
+      start_seconds_float + SCHEDULED_ATTACK_SECONDS_FLOAT
+    );
+    gain_node.gain.setValueAtTime(
+      amplitude_float, start_seconds_float + sustain_seconds_float
+    );
+    gain_node.gain.linearRampToValueAtTime(
+      0, start_seconds_float + duration_seconds_float
+    );
+
+    oscillator_node.connect(gain_node);
+    gain_node.connect(engine_obj.channel_bus_node);
+    oscillator_node.start(start_seconds_float);
+    oscillator_node.stop(
+      start_seconds_float + duration_seconds_float +
+      SCHEDULED_STOP_TAIL_SECONDS_FLOAT
+    );
+    oscillator_node.onended = () => {
+      try {
+        oscillator_node.disconnect();
+        gain_node.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    };
   }
 
   /* ===================================================================
      Join links
      =================================================================== */
 
-  /** A URL that drops a phone straight into this room. */
-  joinUrl({ relayUrl = null } = {}) {
-    const base = location.href.split('#')[0];
-    const params = new URLSearchParams();
-    params.set('r', this.room ?? '');
-    if (relayUrl) params.set('s', relayUrl);
-    return `${base}#${params.toString()}`;
+  /**
+   * Build a URL that drops a phone straight into this room.
+   *
+   * Arguments:
+   *   options_obj (Object): { relay_url_str } to embed, if any.
+   *
+   * Returns:
+   *   (string): The join URL, with the room in its hash.
+   *
+   * Warning:
+   *   The room goes in the hash rather than the query string so it is never
+   *   sent to the host serving the page.
+   */
+  joinUrl(options_obj = {}) {
+    const { relay_url_str = null } = options_obj;
+    const base_url_str = location.href.split('#')[0];
+    const params_obj = new URLSearchParams();
+
+    params_obj.set(ROOM_PARAM_STR, this.room_code_str ?? '');
+    if (relay_url_str) {
+      params_obj.set(RELAY_PARAM_STR, relay_url_str);
+    }
+    return `${base_url_str}#${params_obj.toString()}`;
   }
 
-  /** Parse a join link's hash, for auto-join on load. */
-  static parseJoinUrl(hash = location.hash) {
-    if (!hash || hash.length < 2) return null;
-    const params = new URLSearchParams(hash.slice(1));
-    const room = params.get('r');
-    if (!room) return null;
-    return { room: room.toUpperCase(), relayUrl: params.get('s') || null };
+  /**
+   * Parse a join link's hash, for auto-join on load.
+   *
+   * Arguments:
+   *   hash_str (string): The location hash to read.
+   *
+   * Returns:
+   *   (Object|null): { room_code_str, relay_url_str }, or null if absent.
+   */
+  static parseJoinUrl(hash_str = location.hash) {
+    if (!hash_str || hash_str.length < 2) {
+      return null;
+    }
+    const params_obj = new URLSearchParams(hash_str.slice(1));
+    const room_code_str = params_obj.get(ROOM_PARAM_STR);
+    if (!room_code_str) {
+      return null;
+    }
+    return {
+      room_code_str: room_code_str.toUpperCase(),
+      relay_url_str: params_obj.get(RELAY_PARAM_STR) || null,
+    };
   }
-}
-
-function shortUA() {
-  const ua = navigator.userAgent;
-  if (/iPhone|iPad/.test(ua)) return 'iOS';
-  if (/Android/.test(ua)) return 'Android';
-  if (/Mac/.test(ua)) return 'macOS';
-  if (/Windows/.test(ua)) return 'Windows';
-  if (/Linux/.test(ua)) return 'Linux';
-  return 'device';
 }
 
 export { TRANSPORT_KINDS };

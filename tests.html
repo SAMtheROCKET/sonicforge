@@ -165,7 +165,9 @@ import { encodeQR } from './js/util/qr.js';
 import {
   computeSweepFrequencyAt,
 } from './js/core/calibration-capture.js';
-import { makeRoomCode, encodeSignal, decodeSignal } from './js/sync/transport.js';
+import { makeRoomCode } from './js/sync/transport.js';
+import { encodeSignal, decodeSignal } from './js/sync/signal-codec.js';
+import { foldPhaseIntoChannels } from './js/sync/concert.js';
 
 /* =========================================================================
    Helpers
@@ -1291,6 +1293,46 @@ suite('sync/transport', () => {
     const code = encodeSignal({ room: 'X', sdp: { type: 'answer', sdp: 'test' } });
     const mangled = code.slice(0, 10) + '\n  ' + code.slice(10);
     eq(decodeSignal(mangled).room, 'X', 'line wrapping from a paste must not break decoding');
+  });
+});
+
+/* =========================================================================
+   SUITE — sync/concert
+   ========================================================================= */
+
+suite('sync/concert', () => {
+  // The node's phase offset is the whole point of Concert Mode: two devices
+  // at 0° and 180° is the cancellation experiment. It reaches the channels
+  // only if it is written under the key the deserialiser reads, and writing
+  // it under any other name fails silently — the tones still play.
+  test('a node phase offset lands on the key the rack reads', () => {
+    const folded = foldPhaseIntoChannels([{ phase_degrees_int: 0 }], 180);
+    ok('phase_degrees_int' in folded[0],
+      'the offset must use the key channel-serialisation reads');
+    eq(folded[0].phase_degrees_int, 180);
+  });
+
+  test('a node phase offset adds to the channel’s own phase', () => {
+    const folded = foldPhaseIntoChannels(
+      [{ phase_degrees_int: 90 }, { phase_degrees_int: 270 }], 90
+    );
+    eq(folded[0].phase_degrees_int, 180);
+    eq(folded[1].phase_degrees_int, 0, 'must wrap at a full turn');
+  });
+
+  test('other channel fields survive the fold', () => {
+    const folded = foldPhaseIntoChannels(
+      [{ phase_degrees_int: 0, frequency_hertz_float: 440, waveform_name_str: 'saw' }],
+      45
+    );
+    eq(folded[0].frequency_hertz_float, 440);
+    eq(folded[0].waveform_name_str, 'saw');
+  });
+
+  test('a missing or empty channel list is tolerated', () => {
+    eq(foldPhaseIntoChannels(null, 90).length, 0);
+    eq(foldPhaseIntoChannels([], 90).length, 0);
+    eq(foldPhaseIntoChannels([{}], 90)[0].phase_degrees_int, 90);
   });
 });
 

@@ -30,6 +30,12 @@ from pathlib import Path
 
 REPOSITORY_ROOT_OBJ = Path(__file__).resolve().parent.parent
 
+HTML_ENTRY_POINTS_TUPLE = ("index.html", "tests.html")
+
+MODULE_SCRIPT_PATTERN = re.compile(
+    r'<script[^>]*type="module"[^>]*>(.*?)</script>', re.S
+)
+
 SKIP_PATH_PARTS_TUPLE = ("node_modules", ".git", "tools")
 
 EXPORT_PATTERNS_TUPLE = (
@@ -213,6 +219,67 @@ def check_named_block(block_str, available_set, relative_str, specifier_str,
     return checked_count_int
 
 
+def check_html_imports(root_obj, module_paths_list, errors_list):
+    """
+    Verify the imports inside inline module scripts resolve.
+
+    Brief:
+        index.html and tests.html each carry a `<script type="module">` that
+        imports from js/. Those imports were outside every check, so moving
+        an export between modules broke the unit suite silently: the page
+        failed to load at all, and a page that never runs reports nothing.
+
+    Arguments:
+        root_obj (Path): Repository root.
+        module_paths_list (list[Path]): Modules whose exports are known.
+        errors_list (list[str]): Collector to append to.
+
+    Returns:
+        (int): Number of named imports checked.
+    """
+    exports_by_path_dict = {
+        path_obj.resolve(): read_exported_names(
+            path_obj.read_text(encoding="utf-8")
+        )
+        for path_obj in module_paths_list
+    }
+    checked_count_int = 0
+
+    for html_name_str in HTML_ENTRY_POINTS_TUPLE:
+        html_path_obj = root_obj / html_name_str
+        if not html_path_obj.exists():
+            continue
+
+        html_str = html_path_obj.read_text(encoding="utf-8")
+        for script_str in MODULE_SCRIPT_PATTERN.findall(html_str):
+            for match_obj in IMPORT_PATTERN.finditer(script_str):
+                specifier_str = match_obj.group(5)
+                if not specifier_str.startswith("."):
+                    continue
+
+                target_obj = (root_obj / specifier_str).resolve()
+                if not target_obj.exists():
+                    errors_list.append(
+                        f"{html_name_str}: imports '{specifier_str}', "
+                        "which does not exist"
+                    )
+                    continue
+
+                available_set = exports_by_path_dict.get(target_obj, set())
+                for block_str in (match_obj.group(1), match_obj.group(4)):
+                    if not block_str:
+                        continue
+                    checked_count_int += check_named_block(
+                        block_str,
+                        available_set,
+                        html_name_str,
+                        specifier_str,
+                        errors_list,
+                    )
+
+    return checked_count_int
+
+
 def check_dom_references(module_paths_list, root_obj, index_html_str,
                          errors_list):
     """
@@ -342,7 +409,12 @@ def main():
     index_html_str = (root_obj / "index.html").read_text(encoding="utf-8")
     errors_list = []
 
-    import_count_int = check_imports(module_paths_list, root_obj, errors_list)
+    import_count_int = check_imports(
+        module_paths_list, root_obj, errors_list
+    )
+    import_count_int += check_html_imports(
+        root_obj, module_paths_list, errors_list
+    )
     element_count_int = check_dom_references(
         module_paths_list, root_obj, index_html_str, errors_list
     )

@@ -9,7 +9,8 @@
 
 import { showToast, requestConfirmation } from './feedback.js';
 import { renderQR } from '../util/qr.js';
-import { TRANSPORT_KINDS, ROLE } from '../sync/concert.js';
+import { TRANSPORT_KINDS, ROLE, ConcertMode }
+  from '../sync/concert.js';
 
 /* ---------------------------------------------------------------------------
  * Constants
@@ -39,10 +40,6 @@ const SHORT_TOAST_MS_INT = 1800;
 const LONG_TOAST_MS_INT = 6000;
 const OFFER_TOAST_MS_INT = 5000;
 const LINK_TOAST_MS_INT = 9000;
-
-/** Query parameter names carried by a join link. */
-const ROOM_PARAM_STR = 'r';
-const RELAY_PARAM_STR = 's';
 
 /* ------------------------------------------------------------------------ */
 
@@ -179,7 +176,7 @@ export class ConcertPanel {
 
     el.copy_button_el.addEventListener('click', async () => {
       const join_url_str = this.concert_obj.joinUrl({
-        relayUrl: this.#resolveRelayUrl(),
+        relay_url_str: this.#resolveRelayUrl(),
       });
       try {
         await navigator.clipboard.writeText(join_url_str);
@@ -262,7 +259,7 @@ export class ConcertPanel {
     el.offer_button_el.addEventListener('click', async () => {
       try {
         const offer_code_str =
-          await this.concert_obj.transport.createOffer();
+          await this.concert_obj.transport_obj.createOffer();
         el.signal_input_el.value = offer_code_str;
         el.signal_input_el.select();
         showToast(
@@ -307,8 +304,8 @@ export class ConcertPanel {
     }
 
     try {
-      const transport_obj = this.concert_obj.transport;
-      if (transport_obj.role === 'offerer') {
+      const transport_obj = this.concert_obj.transport_obj;
+      if (transport_obj.pairing_role_str === 'offerer') {
         await transport_obj.acceptAnswer(code_str);
         showToast('Answer accepted — connecting…', 'ok');
         return;
@@ -436,11 +433,11 @@ export class ConcertPanel {
   async host() {
     try {
       await this.concert_obj.host({
-        kind: this.transport_kind_str,
-        relayUrl: this.#resolveRelayUrl(),
+        kind_str: this.transport_kind_str,
+        relay_url_str: this.#resolveRelayUrl(),
       });
       this.app_obj.log(
-        `[concert] hosting room ${this.concert_obj.room} ` +
+        `[concert] hosting room ${this.concert_obj.room_code_str} ` +
         `via ${this.transport_kind_str}`,
         'ok'
       );
@@ -467,8 +464,8 @@ export class ConcertPanel {
 
     try {
       await this.concert_obj.join(code_str, {
-        kind: this.transport_kind_str,
-        relayUrl: this.#resolveRelayUrl(),
+        kind_str: this.transport_kind_str,
+        relay_url_str: this.#resolveRelayUrl(),
       });
       this.app_obj.log(
         `[concert] joined room ${code_str} via ${this.transport_kind_str}`,
@@ -510,7 +507,7 @@ export class ConcertPanel {
    */
   #renderRoleControls() {
     const el = this.el;
-    const is_master_bool = this.concert_obj.role === ROLE.MASTER;
+    const is_master_bool = this.concert_obj.role_str === ROLE.MASTER;
 
     if (is_master_bool) {
       el.offset_el.textContent = 'reference';
@@ -536,16 +533,16 @@ export class ConcertPanel {
   #render() {
     const concert_obj = this.concert_obj;
     const el = this.el;
-    const is_live_bool = concert_obj.role !== ROLE.SOLO;
+    const is_live_bool = concert_obj.role_str !== ROLE.SOLO;
 
     el.live_el.hidden = !is_live_bool;
     el.state_el.textContent = is_live_bool
-      ? `${concert_obj.role} · ${concert_obj.room}`
+      ? `${concert_obj.role_str} · ${concert_obj.room_code_str}`
       : 'solo';
 
     let badge_class_str = 'badge';
     if (is_live_bool) {
-      badge_class_str += concert_obj.role === ROLE.MASTER
+      badge_class_str += concert_obj.role_str === ROLE.MASTER
         ? ' badge--cyan'
         : ' badge--violet';
     }
@@ -557,14 +554,14 @@ export class ConcertPanel {
       return;
     }
 
-    el.room_el.textContent = concert_obj.room;
-    el.role_el.textContent = concert_obj.role;
+    el.room_el.textContent = concert_obj.room_code_str;
+    el.role_el.textContent = concert_obj.role_str;
     this.#renderRoleControls();
 
     try {
       renderQR(
         el.qr_el,
-        concert_obj.joinUrl({ relayUrl: this.#resolveRelayUrl() })
+        concert_obj.joinUrl({ relay_url_str: this.#resolveRelayUrl() })
       );
       el.qr_el.hidden = false;
     } catch (err) {
@@ -587,7 +584,7 @@ export class ConcertPanel {
     el.peers_el.textContent = String(peers_list.length);
     el.peer_list_el.replaceChildren();
 
-    const is_master_bool = this.concert_obj.role === ROLE.MASTER;
+    const is_master_bool = this.concert_obj.role_str === ROLE.MASTER;
 
     for (const peer_obj of peers_list) {
       const row_el = document.createElement('div');
@@ -625,19 +622,19 @@ export class ConcertPanel {
    *   anywhere and joining hands control of this device's output to a host.
    */
   async #autoJoin() {
-    const parsed_obj = this.constructor.parseHash();
+    const parsed_obj = ConcertMode.parseJoinUrl();
     if (!parsed_obj) {
       return;
     }
 
-    this.el.code_input_el.value = parsed_obj.room_str;
+    this.el.code_input_el.value = parsed_obj.room_code_str;
     if (parsed_obj.relay_url_str) {
       this.el.relay_input_el.value = parsed_obj.relay_url_str;
       this.#setTransportKind('relay');
     }
 
     const is_confirmed_bool = await requestConfirmation({
-      title_str: `Join room ${parsed_obj.room_str}?`,
+      title_str: `Join room ${parsed_obj.room_code_str}?`,
       body_html_str:
         'This link invites you into a SonicForge Concert Mode session. ' +
         'Your device will mirror the host’s tones and play in sync with it.',
@@ -648,27 +645,4 @@ export class ConcertPanel {
     }
   }
 
-  /**
-   * Read a room code and relay URL out of the location hash.
-   *
-   * Arguments:
-   *   (none)
-   *
-   * Returns:
-   *   (Object|null): { room_str, relay_url_str }, or null if absent.
-   */
-  static parseHash() {
-    if (!location.hash || location.hash.length < 2) {
-      return null;
-    }
-    const params_obj = new URLSearchParams(location.hash.slice(1));
-    const room_str = params_obj.get(ROOM_PARAM_STR);
-    if (!room_str) {
-      return null;
-    }
-    return {
-      room_str: room_str.toUpperCase(),
-      relay_url_str: params_obj.get(RELAY_PARAM_STR),
-    };
-  }
 }

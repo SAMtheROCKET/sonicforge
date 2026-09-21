@@ -12,7 +12,7 @@
  */
 
 self.__SONICFORGE_PRECACHE = {
-  version: '23bdcc817ca8',
+  version: 'f77d36fb8576',
   files: [
     './assets/icon.svg',
     './assets/logo-mark.svg',
@@ -50,6 +50,7 @@ self.__SONICFORGE_PRECACHE = {
     './js/script/vm.js',
     './js/script/voice.js',
     './js/sync/concert.js',
+    './js/sync/signal-codec.js',
     './js/sync/transport.js',
     './js/ui/calibration-panel.js',
     './js/ui/channels.js',

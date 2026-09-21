@@ -291,9 +291,22 @@ export async function runSelfTest(app, { boot }) {
   });
 
   check('QR encoder produces a join code', () => {
-    app.concert.room = 'TESTRM';
+    app.concert.room_code_str = 'TESTRM';
     const url = app.concert.joinUrl();
     return url.includes('TESTRM') ? url.slice(0, 48) : false;
+  });
+
+  // The panel and the remote 'phase' handler both call this by name. It was
+  // defined as setPhase() and called as setPhaseDegrees(), so the phase
+  // slider threw on every input and the remote handler threw on arrival.
+  check('concert exposes the phase setter its callers use', () => {
+    if (typeof app.concert.setPhaseDegrees !== 'function') {
+      return verdict(false, 'setPhaseDegrees is not a function');
+    }
+    app.concert.setPhaseDegrees(180);
+    const reached = app.concert.phase_degrees_int;
+    app.concert.setPhaseDegrees(0);
+    return verdict(reached === 180, `offset became ${reached}°`);
   });
 
   check('calibration curve canvas present', () =>
