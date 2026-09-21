@@ -66,8 +66,11 @@ CI.
 
 ### GitHub Pages
 
-Push to `main`. `.github/workflows/pages.yml` verifies the build and deploys
-it. In **Settings → Pages**, set **Source** to **GitHub Actions**.
+Push to `main` and set **Settings → Pages → Source** to **Deploy from a
+branch** (`main`, `/`). The site is fully static, so nothing needs building.
+
+An optional CI workflow that verifies the build before deploying lives in
+`ci/` — see `ci/README.md` for how to enable it.
 
 The workflow refuses to deploy if any HTML uses an absolute asset path,
 because Pages serves a project site under `/repo-name/` and an absolute path
