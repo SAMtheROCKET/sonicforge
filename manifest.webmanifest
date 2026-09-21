@@ -1,0 +1,34 @@
+{
+  "name": "SonicForge — Precision Tone Generator & Noise Lab",
+  "short_name": "SonicForge",
+  "description": "16-channel tone generator, seven-colour noise lab, speaker water-eject, microphone room calibration and a real-time 3D spectrogram. Entirely client-side.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0F19",
+  "theme_color": "#0B0F19",
+  "categories": ["utilities", "music", "productivity"],
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Speaker Water Eject",
+      "short_name": "Water Eject",
+      "description": "Run the 165 Hz ejection pulse train",
+      "url": "./#preset=water-eject"
+    },
+    {
+      "name": "Deep Focus Noise",
+      "short_name": "Focus",
+      "description": "Brown-pink hybrid masking noise",
+      "url": "./#preset=deep-focus"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# Normalise every text file to LF in the repository.
+#
+# The service-worker precache manifest is a content hash of the shipped
+# files. If Git rewrote line endings per-platform, that hash would differ
+# between a Windows checkout and the Linux CI runner, and the
+# `build_precache.py --check` gate would fail for no real reason.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

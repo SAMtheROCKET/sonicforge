@@ -1,0 +1,16 @@
+# Generated test reports
+test-results.json
+app-results.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Tooling
+node_modules/
+.vercel
+__pycache__/
+*.pyc

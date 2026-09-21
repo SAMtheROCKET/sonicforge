@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SonicForge — Precision Tone Generator, Noise Lab & 3D Spectrum Analyser</title>
+
+<meta name="description" content="A 16-channel precision tone generator, seven-colour noise lab, speaker water-eject tool, microphone room calibration and real-time 3D spectrogram. Runs entirely in your browser — nothing is uploaded, nothing is installed.">
+<meta name="theme-color" content="#0B0F19">
+<meta name="color-scheme" content="dark">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="SonicForge — Forge any frequency">
+<meta property="og:description" content="16 parallel tone channels, Voss–McCartney pink noise, automatic speaker calibration, a scriptable terminal and a WebGL 3D spectrogram. 100% client-side, zero install.">
+<meta property="og:image" content="./assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B0F19'/%3E%3Cpath d='M4 16h3c1 0 1.5-8 3-8s2 16 3 16 1.5-8 3-8h2c1 0 1.5-5 3-5s2 10 3 10' stroke='%2300F2FE' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="manifest" href="./manifest.webmanifest">
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="./css/theme.css">
+<link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+
+<!-- ====================================================================
+     Gesture unlock — every browser requires a user gesture before audio
+     ==================================================================== -->
+<div class="unlock" id="unlock" role="dialog" aria-modal="true" aria-labelledby="unlock-title">
+  <div class="unlock__inner">
+    <div class="unlock__ring">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 12h3c1 0 1.5-7 3-7s2 14 3 14 1.5-7 3-7h2c1 0 1.5-4 3-4s2 8 3 8"/>
+      </svg>
+    </div>
+    <h1 class="unlock__title" id="unlock-title">Sonic<b>Forge</b></h1>
+    <p class="unlock__sub">
+      Click anywhere to start the audio engine.<br>
+      Everything runs locally — no account, no upload, no install.
+    </p>
+    <p class="unlock__sub" style="margin-top:18px;opacity:.6">
+      <span class="kbd">Space</span> play/stop &nbsp; <span class="kbd">/</span> terminal &nbsp; <span class="kbd">Esc</span> panic
+    </p>
+  </div>
+</div>
+
+<div id="app" hidden>
+
+  <!-- ==================================================================
+       Header
+       ================================================================== -->
+  <header class="topbar">
+    <button class="iconbtn rail-toggle" id="rail-toggle" aria-label="Toggle presets">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#0B0F19" stroke="rgba(0,242,254,.25)"/>
+        <path d="M4 16h3c1 0 1.5-8 3-8s2 16 3 16 1.5-8 3-8h2c1 0 1.5-5 3-5s2 10 3 10" stroke="#00F2FE" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="brand__name">Sonic<em>Forge</em></div>
+        <div class="brand__tag">Forge any frequency</div>
+      </div>
+    </div>
+
+    <div class="topbar__group">
+      <button class="btn btn--master btn--primary" id="master-play" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z"/></svg>
+        <span id="master-play-label">Play</span>
+      </button>
+      <button class="btn btn--sm btn--danger" id="panic" title="Panic — silence everything (Esc)">Panic</button>
+    </div>
+
+    <div class="topbar__group">
+      <span class="label">Master</span>
+      <input class="range" id="master-gain" type="range" min="-60" max="0" step="0.1" value="-12" style="width:104px" aria-label="Master level in dBFS">
+      <span class="mono" id="master-db" style="min-width:52px;font-size:11px;color:var(--ink-hi)">-12.0 dB</span>
+      <div class="meter">
+        <span class="meter__bar"><i id="meter-fill"></i><span class="meter__peak" id="meter-peak"></span></span>
+        <span class="meter__val" id="meter-val">-∞</span>
+      </div>
+    </div>
+
+    <div class="topbar__group">
+      <span class="label" title="Concert pitch reference">A4</span>
+      <select class="input input--sm" id="a4-preset" style="width:96px" aria-label="Pitch standard"></select>
+      <div class="input-group" style="width:96px">
+        <input class="input input--sm mono" id="a4-hz" type="text" inputmode="decimal" value="440" aria-label="A4 frequency in hertz">
+        <span class="input-group__unit">Hz</span>
+      </div>
+      <span class="badge" id="a4-cents" title="Deviation from ISO 440">0 ¢</span>
+    </div>
+
+    <div class="topbar__spacer"></div>
+
+    <div class="topbar__group">
+      <span class="label" title="Sample rate sets the Nyquist ceiling — nothing above half the rate can exist">Rate</span>
+      <select class="input input--sm" id="sample-rate" style="width:88px" aria-label="Sample rate"></select>
+      <span class="badge" id="nyquist-badge" title="Highest synthesisable frequency">24 kHz</span>
+    </div>
+
+    <div class="topbar__group">
+      <label class="switch" title="Safety limiter — prevents 16 stacked channels from clipping">
+        <input type="checkbox" id="limiter" checked>
+        <span class="switch__track"></span>
+        <span class="switch__label">Limiter</span>
+      </label>
+      <button class="iconbtn" id="btn-help" title="Keyboard shortcuts & help">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 16v-5M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================================================================
+       Main
+       ================================================================== -->
+  <div class="shell">
+
+    <!-- ------------------------- LEFT RAIL ------------------------- -->
+    <aside class="rail rail--left" id="rail-left">
+      <section class="panel panel--flush">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+          <span class="panel__title">Presets</span>
+          <span class="panel__spacer"></span>
+          <button class="btn btn--xs" id="preset-stop" title="Stop the running preset">Stop</button>
+        </div>
+        <div class="panel__body panel__body--tight" id="preset-list" style="overflow-y:auto"></div>
+      </section>
+    </aside>
+
+    <!-- --------------------------- STAGE --------------------------- -->
+    <main class="stage">
+
+      <!-- Oscillator -->
+      <section class="panel">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2 12h3c1 0 1.5-7 3-7s2 14 3 14 1.5-7 3-7h2c1 0 1.5-4 3-4s2 8 3 8"/></svg>
+          <span class="panel__title">Oscillator</span>
+          <span class="panel__spacer"></span>
+          <span class="badge badge--cyan" id="osc-target">Channel 01</span>
+        </div>
+
+        <div class="panel__body">
+          <div class="dial-wrap">
+            <div class="dial" id="dial">
+              <canvas aria-hidden="true"></canvas>
+              <div class="dial__core">
+                <div class="dial__note" id="dial-note">A4</div>
+                <div class="dial__cents" id="dial-cents">0 ¢</div>
+                <div class="dial__ch" id="dial-ch">CH 01</div>
+              </div>
+            </div>
+
+            <div class="grow col" style="gap:12px">
+              <div class="freq-readout">
+                <input class="freq-readout__value mono" id="freq-input" type="text" inputmode="decimal" value="440.00" aria-label="Frequency in hertz" spellcheck="false">
+                <span class="freq-readout__unit">Hz</span>
+              </div>
+
+              <div class="seg" id="wave-seg" role="group" aria-label="Waveform"></div>
+
+              <div class="row row--wrap" style="gap:6px">
+                <button class="btn btn--xs" data-freq-step="-12" title="Down one octave">− Oct</button>
+                <button class="btn btn--xs" data-freq-step="-1">− Semi</button>
+                <button class="btn btn--xs" data-freq-step="1">+ Semi</button>
+                <button class="btn btn--xs" data-freq-step="12" title="Up one octave">+ Oct</button>
+                <button class="btn btn--xs" id="btn-snap" title="Snap to the nearest chromatic step">Snap</button>
+                <span class="grow"></span>
+                <button class="btn btn--xs btn--primary" id="btn-add-tone">+ Add tone</button>
+              </div>
+
+              <div class="row" style="gap:14px">
+                <div class="field grow">
+                  <span class="label">Level</span>
+                  <div class="row">
+                    <input class="range grow" id="ch-gain" type="range" min="-90" max="0" step="0.1" value="-18" aria-label="Channel level">
+                    <span class="mono" id="ch-gain-val" style="min-width:52px;font-size:11px;text-align:right">-18.0</span>
+                  </div>
+                </div>
+                <div class="field grow">
+                  <span class="label">Pan</span>
+                  <div class="row">
+                    <input class="range range--bipolar grow" id="ch-pan" type="range" min="-1" max="1" step="0.01" value="0" aria-label="Channel pan">
+                    <span class="mono" id="ch-pan-val" style="min-width:34px;font-size:11px;text-align:right">C</span>
+                  </div>
+                </div>
+                <div class="field grow">
+                  <span class="label">Phase</span>
+                  <div class="row">
+                    <input class="range range--violet grow" id="ch-phase" type="range" min="0" max="359" step="1" value="0" aria-label="Channel phase">
+                    <span class="mono" id="ch-phase-val" style="min-width:34px;font-size:11px;text-align:right">0°</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Channels -->
+      <section class="panel" style="min-height:0">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5zM3 14l9 5 9-5"/></svg>
+          <span class="panel__title">Channels</span>
+          <span class="badge" id="chan-count">0 / 16 live</span>
+          <span class="panel__spacer"></span>
+          <button class="btn btn--xs" id="chan-all-on">All on</button>
+          <button class="btn btn--xs" id="chan-all-off">All off</button>
+          <button class="btn btn--xs" id="chan-reset">Reset</button>
+        </div>
+        <div class="panel__body panel__body--flush">
+          <div class="chan-scroll" id="chan-list" style="max-height:330px"></div>
+        </div>
+      </section>
+
+      <!-- Noise -->
+      <section class="panel">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg>
+          <span class="panel__title">Noise Generator</span>
+          <span class="panel__spacer"></span>
+          <span class="badge" id="noise-state">idle</span>
+          <button class="btn btn--sm" id="noise-toggle">Start</button>
+        </div>
+
+        <div class="panel__body col" style="gap:12px">
+          <div>
+            <span class="label">Colour A</span>
+            <div class="seg" id="noise-a" role="group" aria-label="Primary noise colour" style="margin-top:5px;flex-wrap:wrap"></div>
+          </div>
+
+          <div class="row" style="gap:14px;align-items:flex-end">
+            <div class="field grow">
+              <span class="label">Hybrid blend → B</span>
+              <div class="row">
+                <input class="range grow" id="noise-blend" type="range" min="0" max="1" step="0.01" value="0" aria-label="Hybrid blend">
+                <select class="input input--xs" id="noise-b" style="width:76px" aria-label="Secondary noise colour"></select>
+              </div>
+            </div>
+            <div class="field" style="width:126px">
+              <span class="label">Level</span>
+              <div class="row">
+                <input class="range grow" id="noise-gain" type="range" min="-90" max="0" step="0.5" value="-24" aria-label="Noise level">
+                <span class="mono" id="noise-gain-val" style="min-width:42px;font-size:11px;text-align:right">-24</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="row row--wrap" style="gap:10px">
+            <div class="field" style="width:104px">
+              <span class="label">Filter</span>
+              <select class="input input--sm" id="noise-shape" aria-label="Shaping filter"></select>
+            </div>
+            <div class="field" style="width:96px">
+              <span class="label">Cutoff</span>
+              <div class="input-group">
+                <input class="input input--sm mono" id="noise-freq" type="text" inputmode="decimal" value="1000" aria-label="Filter cutoff">
+                <span class="input-group__unit">Hz</span>
+              </div>
+            </div>
+            <div class="field grow" style="min-width:150px">
+              <span class="label" title="Boosts masking energy across the 300–3400 Hz speech band">Vocal shield</span>
+              <div class="row">
+                <input class="range range--violet grow" id="noise-shield" type="range" min="-12" max="12" step="0.5" value="0" aria-label="Vocal band emphasis">
+                <span class="mono" id="noise-shield-val" style="min-width:42px;font-size:11px;text-align:right">0.0</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="hint" id="noise-hint"></p>
+        </div>
+      </section>
+    </main>
+
+    <!-- ------------------------- RIGHT RAIL ------------------------- -->
+    <aside class="rail rail--right">
+
+      <!-- Visualiser -->
+      <section class="panel">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5zM12 12l9-5M12 12v10M12 12L3 7"/></svg>
+          <span class="panel__title">Field</span>
+          <span class="panel__spacer"></span>
+          <div class="tabs" id="viz-tabs" style="width:196px">
+            <button data-viz="waterfall" class="is-active">3D</button>
+            <button data-viz="interference">Phase</button>
+            <button data-viz="gonio">L/R</button>
+          </div>
+        </div>
+        <div class="viz" id="viz">
+          <canvas id="viz-waterfall"></canvas>
+          <canvas id="viz-interference" hidden></canvas>
+          <div class="viz__badge" id="viz-badge">WebGL2</div>
+          <div class="viz__hud" id="viz-hud"></div>
+          <div class="viz__empty" id="viz-empty">Drag to orbit · scroll to zoom</div>
+        </div>
+      </section>
+
+      <!-- Terminal -->
+      <section class="panel panel--accent">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l4 4-4 4M12 15h7"/></svg>
+          <span class="panel__title">Script Terminal</span>
+          <span class="panel__spacer"></span>
+          <button class="btn btn--xs" id="term-multiline" title="Toggle multi-line script pad">Pad</button>
+          <button class="btn btn--xs" id="term-clear">Clear</button>
+          <button class="btn btn--xs btn--danger" id="term-stop" title="Halt execution (Ctrl+C)">Halt</button>
+        </div>
+
+        <div class="term" data-term="root">
+          <div class="term__log" data-term="log" role="log" aria-live="polite"></div>
+          <div class="term__tracker" data-term="tracker" hidden>
+            <span class="term__pc" data-term="pc">—</span>
+            <span class="term__bar"><i data-term="bar"></i></span>
+            <span class="term__count" data-term="count"></span>
+          </div>
+          <div class="term__prompt">
+            <span class="term__caret">›</span>
+            <span class="term__ghost" data-term="ghost"></span>
+            <input class="term__input" data-term="input" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="play(440hz, 1s, sine)" aria-label="Command input">
+          </div>
+        </div>
+      </section>
+
+      <!-- Calibration -->
+      <section class="panel">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          <span class="panel__title">Auto-Calibration</span>
+          <span class="panel__spacer"></span>
+          <span class="badge" id="cal-state">not measured</span>
+        </div>
+        <div class="panel__body col" style="gap:10px">
+          <canvas class="curve" id="cal-curve" width="600" height="224"></canvas>
+
+          <div class="row" style="gap:6px">
+            <button class="btn btn--sm btn--primary grow" id="cal-run">Measure room</button>
+            <button class="btn btn--sm" id="cal-apply" disabled>Apply</button>
+            <button class="btn btn--sm" id="cal-export" disabled title="Download the curve as JSON">↓</button>
+          </div>
+
+          <div id="cal-stats" hidden>
+            <div class="kv"><span class="kv__k">Round trip</span><span class="kv__v" id="cal-latency">—</span></div>
+            <div class="kv"><span class="kv__k">Noise floor</span><span class="kv__v" id="cal-floor">—</span></div>
+            <div class="kv"><span class="kv__k">Confidence</span><span class="kv__v" id="cal-confidence">—</span></div>
+          </div>
+
+          <p class="note-card" id="cal-note">
+            Plays a 3&nbsp;s sweep through your speakers and listens back with the microphone,
+            then builds a 10-band correction curve.
+            <b class="text-cyan">The audio never leaves this device</b> — the stream is released the
+            moment the measurement ends, and nothing is recorded.
+          </p>
+        </div>
+      </section>
+
+      <!-- Concert Mode -->
+      <section class="panel">
+        <div class="panel__head">
+          <svg class="panel__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM21 19v-1a4 4 0 0 0-3-3.8M16 4.2a4 4 0 0 1 0 7.6"/></svg>
+          <span class="panel__title">Concert Mode</span>
+          <span class="panel__spacer"></span>
+          <span class="badge" id="concert-state">solo</span>
+        </div>
+
+        <div class="panel__body col" style="gap:10px">
+          <div class="tabs" id="concert-kind">
+            <button data-kind="local" class="is-active">Browser</button>
+            <button data-kind="relay">LAN</button>
+            <button data-kind="peer">P2P</button>
+          </div>
+          <p class="hint" id="concert-hint"></p>
+
+          <div class="row" id="concert-relay-row" hidden>
+            <div class="field grow">
+              <span class="label">Relay URL</span>
+              <input class="input input--sm mono" id="concert-relay" type="text" placeholder="ws://192.168.1.20:8787" spellcheck="false">
+            </div>
+          </div>
+
+          <div class="row" style="gap:6px">
+            <button class="btn btn--sm btn--primary grow" id="concert-host">Host room</button>
+            <input class="input input--sm mono" id="concert-code" placeholder="CODE" style="width:84px;text-transform:uppercase" maxlength="8" aria-label="Room code">
+            <button class="btn btn--sm grow" id="concert-join">Join</button>
+          </div>
+
+          <div id="concert-live" hidden>
+            <div class="roomcode" id="concert-room">——————</div>
+            <div class="row" style="gap:10px;align-items:flex-start">
+              <canvas class="qr" id="concert-qr" width="132" height="132"></canvas>
+              <div class="grow col" style="gap:6px">
+                <div class="kv"><span class="kv__k">Role</span><span class="kv__v" id="concert-role">master</span></div>
+                <div class="kv"><span class="kv__k">Peers</span><span class="kv__v" id="concert-peers">0</span></div>
+                <div class="kv"><span class="kv__k">Clock offset</span><span class="kv__v" id="concert-offset">—</span></div>
+                <div class="kv"><span class="kv__k">Round trip</span><span class="kv__v" id="concert-rtt">—</span></div>
+                <button class="btn btn--xs btn--block" id="concert-copy">Copy join link</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="field">
+              <span class="label">This device phase offset</span>
+              <div class="row">
+                <input class="range range--violet grow" id="concert-phase" type="range" min="0" max="359" step="1" value="0" aria-label="Device phase offset">
+                <span class="mono" id="concert-phase-val" style="min-width:42px;font-size:11px;text-align:right">0°</span>
+              </div>
+              <p class="hint" style="margin-top:4px">
+                Set one device to 0° and another to 180°, place them a metre apart,
+                and play the same tone on both to hear active cancellation.
+              </p>
+            </div>
+
+            <div id="concert-peer-list" style="margin-top:8px"></div>
+
+            <div class="row" style="gap:6px;margin-top:8px">
+              <button class="btn btn--xs grow" id="concert-sync-tone">Sync tone to all</button>
+              <button class="btn btn--xs grow" id="concert-push">Push state</button>
+              <button class="btn btn--xs btn--danger" id="concert-leave">Leave</button>
+            </div>
+          </div>
+
+          <div id="concert-peer-pair" hidden>
+            <div class="divider"></div>
+            <span class="label">Manual pairing code</span>
+            <textarea class="input mono" id="concert-signal" rows="3" style="height:auto;padding:6px;font-size:10px" spellcheck="false" placeholder="Paste the other device's code here"></textarea>
+            <div class="row" style="gap:6px;margin-top:6px">
+              <button class="btn btn--xs grow" id="concert-offer">Create offer</button>
+              <button class="btn btn--xs grow" id="concert-accept">Accept code</button>
+              <button class="btn btn--xs" id="concert-copy-signal">Copy</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ==================================================================
+       Status bar
+       ================================================================== -->
+  <footer class="statusbar">
+    <span><span class="status-dot" id="dot-engine"></span><b id="st-engine">booting</b></span>
+    <span>SR <b id="st-rate">—</b></span>
+    <span>LAT <b id="st-latency">—</b></span>
+    <span>VOICES <b id="st-voices">0</b></span>
+    <span>GR <b id="st-gr">0.0 dB</b></span>
+    <span>FPS <b id="st-fps">—</b></span>
+    <span class="statusbar__spacer"></span>
+    <span id="st-hint">Press <b>/</b> for the terminal</span>
+  </footer>
+</div>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div id="modal-root"></div>
+
+<noscript>
+  <div style="padding:40px;text-align:center;color:#b9c4dc;font-family:system-ui">
+    <h1 style="color:#00F2FE">SonicForge</h1>
+    <p>This is a real-time audio application and requires JavaScript.</p>
+  </div>
+</noscript>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+name: Deploy SonicForge to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: No absolute asset paths
+        # Absolute paths break hosting under a /repo-name/ subpath, which is
+        # exactly how GitHub Pages serves a project site.
+        run: |
+          if grep -RnE '(src|href)="/(js|css|assets)/' --include='*.html' .; then
+            echo "::error::Absolute asset path found. Use ./ relative paths."
+            exit 1
+          fi
+          echo "OK - all asset paths are relative."
+
+      - name: Every referenced file exists
+        run: |
+          python - <<'PY'
+          import re, pathlib, sys
+          root = pathlib.Path('.')
+          missing = []
+          for html in root.glob('*.html'):
+              text = html.read_text(encoding='utf-8')
+              refs = re.findall(r'(?:src|href|content)="(\./[^"]+)"', text)
+              for ref in refs:
+                  if not (root / ref[2:]).exists():
+                      missing.append(f'{html.name} -> {ref}')
+          for entry in missing:
+              print(f'::error::missing asset {entry}')
+          sys.exit(1 if missing else 0)
+          PY
+
+      - name: Module imports resolve
+        run: python tools/check_wiring.py
+
+      - name: Precache manifest is current
+        run: python tools/build_precache.py --check
+
+      - name: Style guide
+        # Non-blocking while the refactor is in progress; the summary is
+        # printed so regressions are visible in the run log.
+        continue-on-error: true
+        run: python tools/lint_style.py --summary
+
+  deploy:
+    name: Deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
