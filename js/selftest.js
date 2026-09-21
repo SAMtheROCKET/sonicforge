@@ -293,6 +293,25 @@ export async function runSelfTest(app, { boot }) {
     }
   }, { critical: false });
 
+  // The calibration panel's progress handler only runs during a real
+  // measurement, which needs a microphone and eight seconds. Emitting one
+  // progress event exercises the same path in a millisecond, and that path
+  // was reading three identifiers a rename had already removed.
+  check('calibration progress handler survives an event', () => {
+    const before = consoleErrors.length;
+    app.cal.emit('progress', {
+      phase_str: 'sweep',
+      progress_float: 0.5,
+      message_str: 'self-test probe',
+    });
+    const badge = document.getElementById('cal-state');
+    const grew = consoleErrors.length > before;
+    return verdict(
+      !grew && /50\s*%/.test(badge.textContent),
+      grew ? consoleErrors[consoleErrors.length - 1] : badge.textContent
+    );
+  });
+
   // Let a few animation frames run so the render loops are exercised.
   await sleep(700);
 

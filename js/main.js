@@ -41,7 +41,8 @@ import {
   paintBipolarRange,
 } from './ui/channels.js';
 import { Terminal } from './ui/terminal.js';
-import { CalibrationPanel, ConcertPanel } from './ui/panels.js';
+import { CalibrationPanel } from './ui/calibration-panel.js';
+import { ConcertPanel } from './ui/concert-panel.js';
 import { showToast, requestConfirmation } from './ui/feedback.js';
 
 import { ConcertMode } from './sync/concert.js';

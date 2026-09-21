@@ -493,8 +493,11 @@ export function attachOrbitControls(
     ['wheel', handleWheel, { passive: false }],
   ];
 
-  for (const [event_name_str, handler_fn, options] of listeners_list) {
-    target_el.addEventListener(event_name_str, handler_fn, options);
+  for (const [event_name_str, handler_fn, listener_options_obj]
+    of listeners_list) {
+    target_el.addEventListener(
+      event_name_str, handler_fn, listener_options_obj
+    );
   }
 
   return () => {
