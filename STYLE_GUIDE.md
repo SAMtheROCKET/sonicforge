@@ -163,14 +163,28 @@ A single-line template literal is an ordinary expression and stays checked.
 `url("data:…")` changes the value. There is exactly one such declaration in
 the stylesheet, and it carries a comment saying so.
 
-**HTML inline content and metadata.** Whitespace between inline elements is
-rendered, so breaking such a line changes the page. And a `<meta>`
-description or an Open Graph string is content: rewrapping it alters what
-search engines and link unfurlers read. Structural markup — an opening tag
-carrying several attributes and no text — is wrapped like anything else, and
-`index.html` is wrapped that way throughout.
+**HTML metadata, and one inline break.** A `<meta>` description or an Open
+Graph string is content: rewrapping it changes what search engines and link
+unfurlers read. The favicon is a data URI, unbreakable for the same reason as
+the CSS one. And exactly one line — the status bar's dot immediately followed
+by its label — cannot break, because there is no space between those two
+inline elements and a newline would render as one.
 
-The rule behind all three: **wrap code, never data.** When a break would
+Everything else in the markup **is** wrapped: attributes one per line, SVG
+path data at its command separators, flowing text at existing spaces, and
+adjacent inline elements wherever their container is flex (where whitespace
+text nodes are ignored). `index.html` has nine long lines and `tests.html`
+has none.
+
+That was settled empirically rather than by argument. A probe boots the page,
+records the bounding box of all 111 elements carrying an id plus the total
+element count, and diffs it against the same page before the change. Wrapping
+is correct only when that comparison is identical — and it caught the status
+bar shifting six pixels, which is why that one line still carries a comment
+saying it must stay long. Screenshots cannot do this job: the meters and the
+frame counter differ between runs of the same file.
+
+The rule behind all of it: **wrap code, never data.** When a break would
 change behaviour or content rather than presentation, leave the line long
 and say why in a comment beside it.
 

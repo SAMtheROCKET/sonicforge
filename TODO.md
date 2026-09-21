@@ -110,8 +110,9 @@ function, <=100 LOC entry point, <=79 char lines. Applies to **every** language 
 - [x] P12.8b `selftest.js` split into a harness + five check modules
 - [x] P12.9a Python — serve.py split into four modules, linter split in two
 - [x] P12.9b CSS — clean; one data URI documented as unwrappable
-- [x] P12.9c HTML — structural tags wrapped; inline content and metadata
-      exempted, with the reasoning written into STYLE_GUIDE 4.1
+- [x] P12.9c HTML — tests.html fully wrapped; index.html down to 9 lines,
+      all metadata or provably unbreakable. Verified by diffing rendered
+      geometry of all 111 ids before and after (STYLE_GUIDE 4.1)
 - [x] P12.10 Lint is zero across 76 JS and 8 Python files; suites green at
       115 unit + 65 app, 0 console errors
 

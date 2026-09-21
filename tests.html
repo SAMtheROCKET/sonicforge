@@ -8,36 +8,101 @@
 <link rel="stylesheet" href="./css/components.css">
 <style>
   body { overflow: auto; }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 18px 64px; }
-  h1 { font-size: 20px; color: var(--ink-hi); font-weight: 600; letter-spacing: .02em; }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 28px 18px 64px;
+  }
+
+  h1 {
+    font-size: 20px;
+    color: var(--ink-hi);
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
   h1 em { font-style: normal; color: var(--cyan); }
-  .sum { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 16px 0 22px; }
-  .stat { padding: 8px 14px; border-radius: var(--r); border: 1px solid var(--glass-brd);
-          background: var(--glass-bg); font-family: var(--ff-mono); font-size: 12px; }
+
+  .sum {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 16px 0 22px;
+  }
+
+  .stat {
+    padding: 8px 14px;
+    border-radius: var(--r);
+    border: 1px solid var(--glass-brd);
+    background: var(--glass-bg);
+    font-family: var(--ff-mono);
+    font-size: 12px;
+  }
   .stat b { font-size: 17px; display: block; }
-  .suite { margin-bottom: 18px; border: 1px solid var(--glass-brd); border-radius: var(--r-lg);
-           background: var(--glass-bg); overflow: hidden; }
-  .suite__head { padding: 9px 14px; border-bottom: 1px solid var(--glass-brd);
-                 display: flex; align-items: center; gap: 10px; font-weight: 600;
-                 font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mid); }
-  .t { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: baseline;
-       padding: 5px 14px; border-top: 1px solid rgba(
-         255,
-         255,
-         255,
-         .03
-       ); font-size: 12px; }
+
+  .suite {
+    margin-bottom: 18px;
+    border: 1px solid var(--glass-brd);
+    border-radius: var(--r-lg);
+    background: var(--glass-bg);
+    overflow: hidden;
+  }
+
+  .suite__head {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--glass-brd);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+  }
+
+  .t {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+    padding: 5px 14px;
+    border-top: 1px solid rgba(255, 255, 255, .03);
+    font-size: 12px;
+  }
+
   .t--pass .t__mark { color: var(--lime); }
   .t--fail .t__mark { color: var(--rose); }
   .t--skip .t__mark { color: var(--ink-low); }
   .t__mark { font-family: var(--ff-mono); text-align: center; }
   .t__name { color: var(--ink); }
   .t--fail .t__name { color: var(--ink-hi); }
-  .t__ms { font-family: var(--ff-mono); font-size: 10px; color: var(--ink-low); }
-  .t__err { grid-column: 2 / -1; font-family: var(--ff-mono); font-size: 11px; color: var(--rose);
-            white-space: pre-wrap; padding: 4px 0 6px; line-height: 1.5; }
-  .t__note { grid-column: 2 / -1; font-family: var(--ff-mono); font-size: 10.5px;
-             color: var(--ink-low); padding-bottom: 4px; }
+
+  .t__ms {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    color: var(--ink-low);
+  }
+
+  .t__err {
+    grid-column: 2 / -1;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    color: var(--rose);
+    white-space: pre-wrap;
+    padding: 4px 0 6px;
+    line-height: 1.5;
+  }
+
+  .t__note {
+    grid-column: 2 / -1;
+    font-family: var(--ff-mono);
+    font-size: 10.5px;
+    color: var(--ink-low);
+    padding-bottom: 4px;
+  }
+
   .running { color: var(--amber); }
 </style>
 </head>
@@ -45,9 +110,12 @@
 <div class="wrap">
   <h1>Sonic<em>Forge</em> — Test Suite</h1>
   <p class="hint" style="margin-top:6px">
-    Pure-DSP assertions plus real audio rendered through <code>OfflineAudioContext</code>.
-    Nothing is mocked: the noise slope tests measure a generated buffer's actual spectrum,
-    and the waveform tests compare rendered samples against the browser's own oscillator.
+    Pure-DSP assertions plus real audio rendered through
+    <code>OfflineAudioContext</code>.
+    Nothing is mocked: the noise slope tests measure a generated buffer's
+    actual spectrum,
+    and the waveform tests compare rendered samples against the browser's own
+    oscillator.
   </p>
 
   <div class="sum" id="summary"><span class="running">running…</span></div>
@@ -83,23 +151,28 @@ function ok(value, msg = 'expected truthy') {
 
 function eq(actual, expected, msg = 'values differ') {
   if (!Object.is(actual, expected)) {
-    throw new AssertionError(`${msg}\n  expected: ${fmt(expected)}\n  actual:   ${fmt(actual)}`);
+    throw new AssertionError(`${msg}\n  expected: ${fmt(expected)}\n ` +
+      ` actual:   ${fmt(actual)}`);
   }
 }
 
 function close(actual, expected, tol, msg = 'outside tolerance') {
-  if (!Number.isFinite(actual)) throw new AssertionError(`${msg} — actual is ${fmt(actual)}`);
+  if (!Number.isFinite(actual)) {
+    throw new AssertionError(`${msg} — actual is ${fmt(actual)}`);
+  }
   const d = Math.abs(actual - expected);
   if (d > tol) {
     throw new AssertionError(
-      `${msg}\n  expected: ${expected} ±${tol}\n  actual:   ${actual}\n  delta:    ${d.toPrecision(4)}`
+      `${msg}\n  expected: ${expected} ±${tol}\n  actual: ` +
+        `  ${actual}\n  delta:    ${d.toPrecision(4)}`
     );
   }
 }
 
 function within(actual, lo, hi, msg = 'out of range') {
   if (!(actual >= lo && actual <= hi)) {
-    throw new AssertionError(`${msg}\n  expected: ${lo}…${hi}\n  actual:   ${fmt(actual)}`);
+    throw new AssertionError(`${msg}\n  expected: ${lo}…${hi}\n ` +
+      ` actual:   ${fmt(actual)}`);
   }
 }
 
@@ -122,8 +195,14 @@ function fmt(v) {
   if (typeof v === 'number') return Number.isInteger(v)
     ? String(v)
     : v.toPrecision(6);
-  if (Array.isArray(v)) return `[${v.slice(0, 6).map(fmt).join(', ')}${v.length > 6 ? ', …' : ''}]`;
-  if (v instanceof Float32Array || v instanceof Float64Array) return fmt(Array.from(v.slice(0, 6)));
+  if (Array.isArray(v)) {
+    const shown_str = v.slice(0, 6).map(fmt).join(', ');
+    const more_str = v.length > 6 ? ', …' : '';
+    return `[${shown_str}${more_str}]`;
+  }
+  if (v instanceof Float32Array || v instanceof Float64Array) {
+    return fmt(Array.from(v.slice(0, 6)));
+  }
   return String(v);
 }
 
@@ -271,7 +350,9 @@ suite('util/math', () => {
     close(r1, r2, 1e-9, 'log spacing must be geometrically uniform');
   });
 
-  test('RMS normalisation hits the target without exceeding full scale', () => {
+  test(
+    'RMS normalisation hits the target without exceeding full scale',
+    () => {
     const rng = createSeededRandom(7);
     const buf = Float32Array.from({ length: 8192 }, () => rng() * 2 - 1);
     normaliseRmsInPlace(buf, 0.2);
@@ -375,12 +456,16 @@ suite('dsp/fft', () => {
       );
 
     let peakBin = 0;
-    for (let i = 1; i < mags.length; i++) if (mags[i] > mags[peakBin]) peakBin = i;
+    for (let i = 1; i < mags.length; i++) {
+      if (mags[i] > mags[peakBin]) peakBin = i;
+    }
     eq(peakBin, bin, 'peak must be in the expected bin');
     close(mags[bin], 1.0, 0.02, 'unwindowed amplitude should read ~1.0');
   });
 
-  test('spectrum analysis recovers exact amplitude for a bin-centred tone', () => {
+  test(
+    'spectrum analysis recovers exact amplitude for a bin-centred tone',
+    () => {
     // Bin-centred, so there is no scalloping loss and the window-gain
     // compensation is the only thing under test.
     const n = 8192;
@@ -395,14 +480,19 @@ suite('dsp/fft', () => {
       analyseRealSignalSpectrum(sig, RATE, { size_int: n  });
     let peak = 0;
     let peakF = 0;
-    for (let i = 0; i < mags.length; i++) if (mags[i] > peak) { peak = mags[i]; peakF = freqs[i]; }
+    for (let i = 0; i < mags.length; i++) {
+      if (mags[i] > peak) { peak = mags[i]; peakF = freqs[i]; }
+    }
     close(peakF, f, RATE / n, 'peak frequency');
     close(peak, 0.5, 0.005, 'a bin-centred tone must read its true amplitude');
   });
 
-  test('an off-centre tone loses no more than the Hann scalloping bound', () => {
+  test(
+    'an off-centre tone loses no more than the Hann scalloping bound',
+    () => {
     // Worst-case Hann scalloping loss is -1.42 dB (a factor of 0.849). A tone
-    // landing between bins must stay inside that, or the window maths is wrong.
+    // landing between bins must stay inside that, or the window
+    // maths is wrong.
     const n = 8192;
     const f = ((171.5) * RATE) / n; // deliberately half-way between two bins
     const sig =
@@ -415,7 +505,8 @@ suite('dsp/fft', () => {
     let peak = 0;
     for (let i = 0; i < mags.length; i++) if (mags[i] > peak) peak = mags[i];
     const lossDb = 20 * Math.log10(peak / 0.5);
-    note(`scalloping loss ${lossDb.toFixed(2)} dB (Hann worst case is -1.42 dB)`);
+    note(`scalloping loss ${lossDb.toFixed(2)} ` +
+      `dB (Hann worst case is -1.42 dB)`);
     within(
       lossDb,
       -1.5,
@@ -450,14 +541,18 @@ suite('dsp/weighting', () => {
     close(computeAWeightingDb(10000), -2.5, 0.4, 'A(10 kHz)');
   });
 
-  test('C-weighting is flat in the midband and rolls off at the extremes', () => {
+  test(
+    'C-weighting is flat in the midband and rolls off at the extremes',
+    () => {
     close(computeCWeightingDb(1000), 0, 0.05);
     close(computeCWeightingDb(100), -0.3, 0.3);
     ok(computeCWeightingDb(20) < -5, 'C must roll off below 20 Hz');
     ok(computeCWeightingDb(20000) < -5, 'C must roll off above 20 kHz');
   });
 
-  test('grey weighting inverts the ear: boosts extremes, unity at 1 kHz', () => {
+  test(
+    'grey weighting inverts the ear: boosts extremes, unity at 1 kHz',
+    () => {
     close(computeGreyWeightingMultiplier(1000), 1, 0.05, 'unity at 1 kHz');
     ok(
       computeGreyWeightingMultiplier(100) > 2,
@@ -505,7 +600,9 @@ suite('dsp/weighting', () => {
     close(out[0], 5, 0.1, 'midpoint in log-f must be the midpoint in value');
   });
 
-  test('EQ_BAND_CENTRES_HERTZ_LIST are ISO-spaced across the audio band', () => {
+  test(
+    'EQ_BAND_CENTRES_HERTZ_LIST are ISO-spaced across the audio band',
+    () => {
     eq(EQ_BAND_CENTRES_HERTZ_LIST.length, 10);
     eq(EQ_BAND_CENTRES_HERTZ_LIST[0], 31.5);
     eq(EQ_BAND_CENTRES_HERTZ_LIST[9], 16000);
@@ -569,7 +666,8 @@ suite('dsp/noise-shapes', () => {
     const low = measureBandPowerDb(freqs, mags, 80, 160);
     const mid = measureBandPowerDb(freqs, mags, 700, 1400);
     const high = measureBandPowerDb(freqs, mags, 7000, 12000);
-    note(`80–160 Hz ${low.toFixed(1)} dB · 1 kHz ${mid.toFixed(1)} dB · 7–12 kHz ${high.toFixed(1)} dB`);
+    note(`80–160 Hz ${low.toFixed(1)} dB · 1 kHz ` +
+      `${mid.toFixed(1)} dB · 7–12 kHz ${high.toFixed(1)} dB`);
     ok(
       low > mid + 5,
       'grey must carry far more low-frequency energy than mid'
@@ -584,14 +682,19 @@ suite('dsp/noise-shapes', () => {
     const centre = measureBandPowerDb(freqs, mags, 350, 700);
     const low = measureBandPowerDb(freqs, mags, 40, 80);
     const high = measureBandPowerDb(freqs, mags, 6000, 12000);
-    note(`40–80 Hz ${low.toFixed(1)} · 350–700 Hz ${centre.toFixed(1)} · 6–12 kHz ${high.toFixed(1)}`);
+    note(`40–80 Hz ${low.toFixed(1)} · 350–700 Hz ` +
+      `${centre.toFixed(1)} · 6–12 kHz ${high.toFixed(1)}`);
     ok(centre > high + 6, 'the mid bell must dominate the top end');
     ok(centre > low, 'the mid bell must dominate the very bottom');
   });
 
   test('every colour is normalised to a comparable RMS', () => {
     const levels =
-      NOISE_COLOUR_KEYS_LIST.map((k) => rmsOf(buildNoiseBuffer(k, 1 << 14, RATE, { seed_int: 9 })));
+      NOISE_COLOUR_KEYS_LIST.map(
+        (k) => rmsOf(
+          buildNoiseBuffer(k, 1 << 14, RATE, { seed_int: 9 })
+        )
+      );
     for (let i = 0; i < levels.length; i++) {
       close(levels[i], 0.18, 0.02, `${NOISE_COLOUR_KEYS_LIST[i]} RMS`);
     }
@@ -611,7 +714,8 @@ suite('dsp/noise-shapes', () => {
     const typicalStep = computeMedian(
       Array.from({ length: 500 }, (_, i) => Math.abs(buf[i + 1] - buf[i]))
     );
-    note(`wrap step ${wrapStep.toExponential(2)} vs typical ${typicalStep.toExponential(2)}`);
+    note(`wrap step ${wrapStep.toExponential(2)} vs ` +
+      `typical ${typicalStep.toExponential(2)}`);
     ok(
       wrapStep < typicalStep * 12,
       'the loop point must not be a discontinuity'
@@ -763,7 +867,9 @@ suite('core/tuning', () => {
   });
 
   test('every pitch standard is plausible', () => {
-    for (const p of PITCH_STANDARDS_LIST) within(p.hertz_float, 380, 500, `${p.label_str} Hz`);
+    for (const p of PITCH_STANDARDS_LIST) {
+      within(p.hertz_float, 380, 500, `${p.label_str} Hz`);
+    }
   });
 });
 
@@ -902,7 +1008,9 @@ suite('core/waveforms', () => {
 suite('web audio integration', () => {
   const F = RATE / 128; // exactly 128 samples per period
 
-  test('PeriodicWave(real=0, imag=[0,1]) equals the built-in sine', async () => {
+  test(
+    'PeriodicWave(real=0, imag=[0,1]) equals the built-in sine',
+    async () => {
     const build = (setup) => async (ctx) => {
       const osc = ctx.createOscillator();
       setup(osc, ctx);
@@ -916,7 +1024,9 @@ suite('web audio integration', () => {
     const custom = await render(
       build((o, ctx) => {
         o.setPeriodicWave(ctx.createPeriodicWave(
-          new Float32Array([0, 0]), new Float32Array([0, 1]), { disableNormalization: false }
+          new Float32Array([0, 0]),
+          new Float32Array([0, 1]),
+          { disableNormalization: false }
         ));
       }),
       { length: 2048 }
@@ -925,8 +1035,10 @@ suite('web audio integration', () => {
     const d = maxDiff(native, custom, 256, 2048);
     note(`max sample difference ${d.toExponential(2)}`);
     ok(d < 1e-3,
-      `imag[1]=+1 must reproduce the native sine, i.e. x(t)=Σ real·cos + imag·sin.\n` +
-      `  If this fails, the sign convention in core/waveforms.js is inverted.`);
+      `imag[1]=+1 must reproduce the native ` +
+        `sine, i.e. x(t)=Σ real·cos + imag·sin.\n` +
+      `  If this fails, the sign convention ` +
+        `in core/waveforms.js is inverted.`);
   });
 
   test('a 90° phase rotation renders a cosine', async () => {
@@ -1012,7 +1124,9 @@ suite('web audio integration', () => {
     close(peakOf(out.subarray(256)), 0.5012, 0.01, '−6 dBFS peak amplitude');
   });
 
-  test('an exponential sweep passes through its midpoint frequency', async () => {
+  test(
+    'an exponential sweep passes through its midpoint frequency',
+    async () => {
     const durSec = 0.5;
     const out = await render(async (ctx) => {
       const osc = ctx.createOscillator();
@@ -1033,8 +1147,11 @@ suite('web audio integration', () => {
       analyseRealSignalSpectrum(mid, RATE, { size_int: 2048  });
     let peakF = 0;
     let peak = 0;
-    for (let i = 1; i < mags.length; i++) if (mags[i] > peak) { peak = mags[i]; peakF = freqs[i]; }
-    note(`instantaneous frequency at the midpoint: ${peakF.toFixed(0)} Hz (expected 400)`);
+    for (let i = 1; i < mags.length; i++) {
+      if (mags[i] > peak) { peak = mags[i]; peakF = freqs[i]; }
+    }
+    note(`instantaneous frequency at the midpoint: ` +
+      `${peakF.toFixed(0)} Hz (expected 400)`);
     close(peakF, 400, 60, 'sweep midpoint frequency');
   });
 
@@ -1049,7 +1166,9 @@ suite('web audio integration', () => {
     );
   });
 
-  test('a generated noise buffer plays back at the expected level', async () => {
+  test(
+    'a generated noise buffer plays back at the expected level',
+    async () => {
     const data = buildNoiseBuffer('pink', 1 << 14, RATE, { seed_int: 31 });
     const out = await render(async (ctx) => {
       const buf = ctx.createBuffer(1, data.length, RATE);
@@ -1336,7 +1455,8 @@ suite('script/commands', () => {
       try {
         parse(ex);
       } catch (err) {
-        throw new AssertionError(`${name}: its own example fails to parse — ${ex}\n  ${err.message}`);
+        throw new AssertionError(`${name}: its own example fails to ` +
+          `parse — ${ex}\n  ${err.message}`);
       }
     }
   });
@@ -1361,7 +1481,8 @@ suite('util/qr', () => {
     const url =
       'https://sonicforge.app/#r=K7M3QX&s=ws%3A%2F%2F192.168.1.20%3A8787';
     const qr = encodeQR(url);
-    note(`${url.length} bytes → version ${qr.version_int}, ${qr.size_int}×${qr.size_int}, mask ${qr.mask_int}`);
+    note(`${url.length} bytes → version ${qr.version_int}, ` +
+      `${qr.size_int}×${qr.size_int}, mask ${qr.mask_int}`);
     within(qr.version_int, 3, 10);
   });
 
@@ -1393,7 +1514,9 @@ suite('util/qr', () => {
   test('module density is balanced', () => {
     const qr = encodeQR('https://sonicforge.app/#r=ABC123');
     let dark = 0;
-    for (let i = 0; i < qr.modules_int8array.length; i++) if (qr.modules_int8array[i] === 1) dark++;
+    for (let i = 0; i < qr.modules_int8array.length; i++) {
+      if (qr.modules_int8array[i] === 1) dark++;
+    }
     const pct = (dark / qr.modules_int8array.length) * 100;
     note(`${pct.toFixed(1)}% dark`);
     within(pct, 35, 65, 'mask selection should keep density near 50%');
@@ -1402,7 +1525,9 @@ suite('util/qr', () => {
   test('no module is left unset', () => {
     const qr = encodeQR('COVERAGE TEST 12345');
     let unset = 0;
-    for (let i = 0; i < qr.modules_int8array.length; i++) if (qr.modules_int8array[i] === -1) unset++;
+    for (let i = 0; i < qr.modules_int8array.length; i++) {
+      if (qr.modules_int8array[i] === -1) unset++;
+    }
     eq(unset, 0, 'every module must be written');
   });
 
@@ -1418,7 +1543,10 @@ suite('util/qr', () => {
 
   test('BarcodeDetector decodes our output (if available)', async () => {
     if (!('BarcodeDetector' in window)) {
-      note('BarcodeDetector unavailable in this browser — structural checks only');
+      note(
+        'BarcodeDetector unavailable in this browser — ' +
+        'structural checks only'
+      );
       return;
     }
     const supported = await BarcodeDetector.getSupportedFormats();
@@ -1441,7 +1569,9 @@ suite('util/qr', () => {
     c.fillStyle = '#000';
     for (let y = 0; y < qr.size_int; y++) {
       for (let x = 0; x < qr.size_int; x++) {
-        if (qr.isDark_fn(x, y)) c.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+        if (qr.isDark_fn(x, y)) {
+          c.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+        }
       }
     }
 
@@ -1532,7 +1662,11 @@ suite('sync/concert', () => {
 
   test('other channel fields survive the fold', () => {
     const folded = foldPhaseIntoChannels(
-      [{ phase_degrees_int: 0, frequency_hertz_float: 440, waveform_name_str: 'saw' }],
+      [{
+        phase_degrees_int: 0,
+        frequency_hertz_float: 440,
+        waveform_name_str: 'saw',
+      }],
       45
     );
     eq(folded[0].frequency_hertz_float, 440);
@@ -1562,7 +1696,9 @@ async function run() {
     head.className = 'suite__head';
     head.textContent = s.name;
     const count = document.createElement('span');
-    count.style.cssText = 'margin-left:auto;font-family:var(--ff-mono);text-transform:none;letter-spacing:0';
+    count.style.cssText =
+      'margin-left:auto;font-family:var(--ff-mono);' +
+      'text-transform:none;letter-spacing:0';
     head.appendChild(count);
     box.appendChild(head);
     resultsEl.appendChild(box);
@@ -1620,10 +1756,13 @@ async function run() {
 
   const ms = performance.now() - t0;
   summaryEl.innerHTML = `
-    <span class="stat" style="border-color:${fail ? 'var(--rose)' : 'var(--lime)'}">
-      <b style="color:${fail ? 'var(--rose)' : 'var(--lime)'}">${fail ? 'FAIL' : 'PASS'}</b>result</span>
+    <span class="stat"
+      style="border-color:${fail ? 'var(--rose)' : 'var(--lime)'}">
+      <b style="color:${fail ? 'var(--rose)' : 'var(--lime)'}">` +
+    `${fail ? 'FAIL' : 'PASS'}</b>result</span>
     <span class="stat"><b class="text-lime">${pass}</b>passed</span>
-    <span class="stat"><b class="${fail ? 'text-rose' : ''}">${fail}</b>failed</span>
+    <span class="stat">` +
+    `<b class="${fail ? 'text-rose' : ''}">${fail}</b>failed</span>
     <span class="stat"><b>${ms.toFixed(0)}</b>ms</span>`;
 
   // Machine-readable handle for the browser automation pass.
@@ -1646,13 +1785,18 @@ async function run() {
         .map((t) => ({ suite: s.name, test: t.name, error: t.__error }))
     ),
     notes: results.flatMap((s) =>
-      s.tests.filter((t) => t.note).map((t) => `${s.name} / ${t.name}: ${t.note}`)
+      s.tests.filter((t) => t.note).map((t) => `${s.name} / ` +
+        `${t.name}: ${t.note}`)
     ),
   };
 
   window.__TESTS__ = report;
-  document.title = `${fail ? `✗ ${fail} FAIL` : `✓ ${pass} pass`} — SonicForge Tests`;
-  console.log(`[SonicForge tests] ${pass} passed, ${fail} failed in ${ms.toFixed(0)}ms`);
+  const verdict_str = fail
+    ? `✗ ${fail} FAIL`
+    : `✓ ${pass} pass`;
+  document.title = `${verdict_str} — SonicForge Tests`;
+  console.log(`[SonicForge tests] ${pass} passed, ` +
+    `${fail} failed in ${ms.toFixed(0)}ms`);
 
   // When served by the bundled dev server, hand the report back so a headless
   // run can be asserted on from the command line. Silently ignored elsewhere.
