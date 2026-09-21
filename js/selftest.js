@@ -215,6 +215,24 @@ export async function runSelfTest(app, { boot }) {
     return Math.abs(c4 - 256.87) < 0.1 ? `C4 = ${c4.toFixed(2)} Hz at A4=432` : `got ${c4}`;
   });
 
+  // set() writes globals through a switch on a keyword. A migration once
+  // rewrote one of those case labels -- a string literal, not an identifier
+  // -- so an alias silently stopped matching. Both spellings are checked.
+  for (const keyword of ['a4', 'tuning']) {
+    // eslint-disable-next-line no-await-in-loop
+    await (async () => {
+      app.tuning.referenceHertz = 440;
+      app.vm.run(`set(${keyword}, 432)`, { label_str: 'selftest' });
+      await sleep(260);
+      const reached = app.tuning.referenceHertz;
+      app.vm.stop({ is_silent_bool: true });
+      app.tuning.referenceHertz = 440;
+      check(`set(${keyword}) reaches the tuning reference`, () =>
+        verdict(Math.abs(reached - 432) < 0.01, `A4 became ${reached} Hz`)
+      );
+    })();
+  }
+
   check('script compiles and runs', () => {
     const before = app.vm.state_str;
     app.vm.run('play(440hz, 60ms, sine, -30db)\nwait(20ms)', { label: 'selftest' });

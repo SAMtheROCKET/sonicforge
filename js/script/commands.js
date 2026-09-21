@@ -1,203 +1,42 @@
 /**
  * The SonicForge command set.
  *
- * Every command receives a runtime (`rt`) carrying the application handles and
- * — critically — `rt.when_seconds_float`, the AudioContext timestamp at which this command
- * is supposed to take effect. Because the VM schedules ahead of real time, a
- * command must never act "now": audio is scheduled against `rt.when_seconds_float`, and any
- * side effect that cannot be expressed as an AudioParam event is deferred with
- * `rt.at()` so it lands at the right moment.
+ * Brief:
+ *   Each entry is a signature, help text, an example, and a run function.
+ *   Every run function receives the runtime and the parsed arguments, and
+ *   returns its duration in milliseconds. Returning 0 means the command is
+ *   instantaneous and the next one follows immediately.
  *
- * Each command returns its duration in milliseconds. Returning 0 means the
- * command is instantaneous and the next one follows immediately.
+ *   Commands schedule against runtime.when_seconds_float rather than acting
+ *   now, because the VM is running ahead of real time. Anything that is not
+ *   an AudioParam event goes through runtime.scheduleAt.
  */
 
-import { convertDbToLinear } from '../util/amplitude.js';
 import { formatDuration, formatFrequency } from '../util/frequency.js';
 import { clampToRange } from '../util/numeric.js';
-import {
-  applyWaveform,
-  WAVEFORM_KEYS_LIST,
-} from '../core/waveforms.js';
 import { NOISE_COLOUR_KEYS_LIST } from '../dsp/noise-colours.js';
-import { parseNoteName } from '../core/tuning.js';
+import {
+  readArgumentValue,
+  readNumber,
+  readFrequencyHertz,
+  readDurationMs,
+  readWord,
+  readWaveformName,
+  readGainDb,
+} from './arguments.js';
+import { playVoice, playAmplitudeModulated } from './voice.js';
 
-/* =========================================================================
-   Argument coercion
-   ========================================================================= */
+export { makeRuntime } from './runtime.js';
 
-const WORD_ALIASES = {
-  sin: 'sine', sine: 'sine',
-  sqr: 'square', square: 'square',
-  tri: 'triangle', triangle: 'triangle',
-  saw: 'sawtooth', sawtooth: 'sawtooth', ramp: 'sawtooth',
-  imp: 'impulse', impulse: 'impulse', pulse: 'impulse', click: 'impulse',
-  lin: 'linear', linear: 'linear',
-  exp: 'exponential', exponential: 'exponential', log: 'exponential',
-};
+/* ---------------------------------------------------------------------------
+ * Constants
+ * ------------------------------------------------------------------------ */
 
-function argValue(a) {
-  if (a == null) return undefined;
-  if (a.kind_str === 'number') return a.value_any;
-  if (a.kind_str === 'string' || a.kind_str === 'word') return a.value_any;
-  return undefined;
-}
+/** DTMF row and column frequencies, in hertz. */
+const DTMF_ROW_HERTZ_TUPLE = Object.freeze([697, 770, 852, 941]);
+const DTMF_COLUMN_HERTZ_TUPLE = Object.freeze([1209, 1336, 1477, 1633]);
 
-function num(a, fallback) {
-  const v = argValue(a);
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return fallback;
-}
-
-/**
- * A frequency argument may be a number, a unit-suffixed number, or a note
- * name — `play(A4)` and `play(440hz)` are the same tone.
- */
-function freq(rt, a, fallback = 440) {
-  const v = argValue(a);
-  if (typeof v === 'number' && Number.isFinite(v)) return clampToRange(v, 0.01, 22050);
-  if (typeof v === 'string') {
-    const midi = parseNoteName(v);
-    if (Number.isFinite(midi)) return rt.app.tuning.convertMidiToHertz(midi);
-    const n = Number(v);
-    if (Number.isFinite(n)) return clampToRange(n, 0.01, 22050);
-  }
-  return fallback;
-}
-
-/** Time in milliseconds. Bare numbers are milliseconds by convention. */
-function time(a, fallback = 500) {
-  const n = num(a, fallback);
-  return clampToRange(n, 0, 30 * 60 * 1000);
-}
-
-function word(a, fallback = '') {
-  const v = argValue(a);
-  if (typeof v !== 'string') return fallback;
-  const key = v.toLowerCase();
-  return WORD_ALIASES[key] ?? key;
-}
-
-function waveform(a, fallback = 'sine') {
-  const w = word(a, fallback);
-  return WAVEFORM_KEYS_LIST.includes(w) ? w : fallback;
-}
-
-function gainDb(a, fallback = -12) {
-  return clampToRange(num(a, fallback), -90, 0);
-}
-
-/* =========================================================================
-   Runtime
-   ========================================================================= */
-
-/**
- * Build the object handed to every command invocation.
- * @param {*} app  the SonicForge application facade
- * @param {import('./vm.js').ScriptVM} vm
- */
-export function makeRuntime(app, vm) {
-  return {
-    app,
-    vm,
-    get engine() { return app.engine; },
-    get ctx() { return app.engine.context_obj; },
-    when_seconds_float: 0,
-    line_int: 0,
-    program_counter_int: 0,
-    last_label_str: null,
-
-    /** Log a line to the terminal, deferred to the moment it actually happens. */
-    log(text, level = 'exec') {
-      this.at(() => app.log?.(text, level));
-    },
-
-    /** Immediate log, used for parameter echoes that should appear at schedule time. */
-    logNow(text, level = 'dim') {
-      app.log?.(text, level);
-    },
-
-    /**
-     * Defer a side effect until `rt.when_seconds_float` arrives in wall-clock terms.
-     * Anything that is not an AudioParam event must go through this, or the
-     * VM's lookahead would make it happen up to 350 ms early.
-     */
-    at(fn, when = this.when_seconds_float) {
-      const delay = Math.max(0, (when - app.engine.currentTimeSeconds) * 1000);
-      if (delay < 2) {
-        try { fn(); } catch (e) { console.error('[SonicForge] command error', e); }
-        return null;
-      }
-      return vm.deferCall(fn, delay);
-    },
-
-    hold: (node, gain) => vm.holdNode(node, gain),
-    label(text) { this.last_label_str = text; },
-  };
-}
-
-/* =========================================================================
-   Voice helper
-   ========================================================================= */
-
-/**
- * Create a one-shot voice with a click-free envelope, routed through the
- * channel bus so it is metered, visualised and limited like everything else.
- */
-function voice(rt, { freq: f, waveform: wf, gainDb: db, pan = 0, phase = 0, durSec, ramp = null, when = rt.when_seconds_float }) {
-  const ctx = rt.ctx;
-
-  const osc = ctx.createOscillator();
-  applyWaveform(osc, wf, phase);
-  osc.frequency.setValueAtTime(clampToRange(f, 0.01, ctx.sampleRate / 2 - 1), when);
-
-  if (ramp) {
-    const target = clampToRange(ramp.to, 0.01, ctx.sampleRate / 2 - 1);
-    if (ramp.curve === 'linear') {
-      osc.frequency.linearRampToValueAtTime(target, when + durSec);
-    } else {
-      osc.frequency.exponentialRampToValueAtTime(target, when + durSec);
-    }
-  }
-
-  const g = ctx.createGain();
-  const amp = convertDbToLinear(db);
-  // Envelope proportions scale down for very short events so a 5 ms blip is
-  // still a blip and not a pure click.
-  const atk = Math.min(0.006, durSec * 0.25);
-  const rel = Math.min(0.018, durSec * 0.35);
-  g.gain.setValueAtTime(0, when);
-  g.gain.linearRampToValueAtTime(amp, when + atk);
-  if (durSec > atk + rel) g.gain.setValueAtTime(amp, when + durSec - rel);
-  g.gain.linearRampToValueAtTime(0, when + durSec);
-
-  osc.connect(g);
-
-  let out = g;
-  if (pan !== 0 && ctx.createStereoPanner) {
-    const p = ctx.createStereoPanner();
-    p.pan.setValueAtTime(clampToRange(pan, -1, 1), when);
-    g.connect(p);
-    out = p;
-  }
-  out.connect(rt.engine.channel_bus_node);
-
-  osc.start(when);
-  osc.stop(when + durSec + 0.03);
-  rt.hold(osc, g);
-  return osc;
-}
-
-/* =========================================================================
-   Command registry
-   ========================================================================= */
-
-const DTMF_ROWS = [697, 770, 852, 941];
-const DTMF_COLS = [1209, 1336, 1477, 1633];
+/** Keypad character to [row, column] index. */
 export const DTMF_MAP = Object.freeze({
   1: [0, 0], 2: [0, 1], 3: [0, 2], A: [0, 3],
   4: [1, 0], 5: [1, 1], 6: [1, 2], B: [1, 3],
@@ -205,392 +44,584 @@ export const DTMF_MAP = Object.freeze({
   '*': [3, 0], 0: [3, 1], '#': [3, 2], D: [3, 3],
 });
 
+/** Characters treated as a pause rather than an unknown digit. */
+const DTMF_PAUSE_REGEX = /[\s\-.,]/;
+
+/** Separators accepted between the notes of a chord. */
+const CHORD_SEPARATOR_REGEX = /[,\s/+]+/;
+
+/** Channels a script may address, and the pulse count a burst may request. */
+const MIN_CHANNEL_NUMBER_INT = 1;
+const MAX_CHANNEL_NUMBER_INT = 16;
+const MIN_BURST_COUNT_INT = 1;
+const MAX_BURST_COUNT_INT = 500;
+
+/** Master level bounds, which allow a little gain the channels do not. */
+const MIN_MASTER_DB_FLOAT = -90;
+const MAX_MASTER_DB_FLOAT = 6;
+
+/** Bounds for the globals set() can write. */
+const MIN_REFERENCE_HERTZ_FLOAT = 380;
+const MAX_REFERENCE_HERTZ_FLOAT = 500;
+const MIN_SHIELD_DB_FLOAT = -12;
+const MAX_SHIELD_DB_FLOAT = 12;
+
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Resolve a one-based channel argument to a zero-based rack index.
+ *
+ * Arguments:
+ *   runtime_obj (Object): The command runtime.
+ *   argument_obj (Object|null): The channel argument.
+ *
+ * Returns:
+ *   (number): Zero-based index into the rack.
+ */
+function readChannelIndex(runtime_obj, argument_obj) {
+  const channel_count_int =
+    runtime_obj.app_obj.rack.channels_list.length || MAX_CHANNEL_NUMBER_INT;
+  const requested_int = Math.round(readNumber(argument_obj, 1));
+  return clampToRange(
+    requested_int, MIN_CHANNEL_NUMBER_INT, channel_count_int
+  ) - 1;
+}
+
+/**
+ * Apply one global parameter on behalf of set().
+ *
+ * Arguments:
+ *   app_obj (Object): The application facade.
+ *   key_str (string): Parameter name, already lower-cased.
+ *   value_float (number): Requested value.
+ *
+ * Returns:
+ *   (none)
+ *
+ * Warning:
+ *   An unknown key is reported to the terminal rather than ignored, because
+ *   a silently dropped set() looks exactly like one that worked.
+ */
+function applyGlobalParameter(app_obj, key_str, value_float) {
+  switch (key_str) {
+    case 'a4':
+    case 'pitch':
+    case 'tuning':
+      app_obj.tuning.referenceHertz = clampToRange(
+        value_float, MIN_REFERENCE_HERTZ_FLOAT, MAX_REFERENCE_HERTZ_FLOAT
+      );
+      break;
+    case 'shield':
+    case 'vocal':
+      app_obj.noise.setShieldDb(clampToRange(
+        value_float, MIN_SHIELD_DB_FLOAT, MAX_SHIELD_DB_FLOAT
+      ));
+      break;
+    case 'blend':
+    case 'hybrid':
+      app_obj.noise.setBlendRatio(clampToRange(value_float, 0, 1));
+      break;
+    case 'limiter':
+      app_obj.engine.isLimiterEnabled = Boolean(value_float);
+      break;
+    case 'noisepan':
+      app_obj.noise.setPanPosition(clampToRange(value_float, -1, 1));
+      break;
+    default:
+      app_obj.log?.(`set(): unknown parameter '${key_str}'`, 'warn');
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+
+/** Every command the scripting language understands. */
 export const COMMANDS = {
-  /* ---------------------------------------------------------------- */
   play: {
     signature: 'play(frequency, duration_ms, waveform, gain_db, pan)',
-    help: 'Play a single tone. Frequency accepts Hz, kHz, or a note name (A4).',
+    help:
+      'Play a single tone. Frequency accepts Hz, kHz, or a note name (A4).',
     example: 'play(440hz, 1s, sine, -12db)',
-    run(rt, a) {
-      const f = freq(rt, a[0], 440);
-      const ms = time(a[1], 500);
-      const wf = waveform(a[2], 'sine');
-      const db = gainDb(a[3], -12);
-      const pan = clampToRange(num(a[4], 0), -1, 1);
-      if (ms <= 0) return 0;
+    run(runtime_obj, arguments_list) {
+      const frequency_hertz_float =
+        readFrequencyHertz(runtime_obj, arguments_list[0], 440);
+      const duration_ms_float = readDurationMs(arguments_list[1], 500);
+      const waveform_name_str =
+        readWaveformName(arguments_list[2], 'sine');
+      const gain_db_float = readGainDb(arguments_list[3], -12);
+      const pan_position_float =
+        clampToRange(readNumber(arguments_list[4], 0), -1, 1);
+      if (duration_ms_float <= 0) {
+        return 0;
+      }
 
-      voice(rt, { freq: f, waveform: wf, gainDb: db, pan, durSec: ms / 1000 });
-      rt.label(`play ${formatFrequency(f)} · ${wf} · ${formatDuration(ms)}`);
-      rt.log(`▶ ${formatFrequency(f)}  ${wf}  ${db.toFixed(1)} dBFS  ${formatDuration(ms)}`);
-      return ms;
-    },
-  },
-
-  /* ---------------------------------------------------------------- */
-  sweep: {
-    signature: "sweep(start_hz, end_hz, duration_ms, curve['linear'|'exponential'], waveform, gain_db)",
-    help: 'Glide between two frequencies. Exponential is constant octaves per second.',
-    example: 'sweep(20hz, 20khz, 3s, exponential)',
-    run(rt, a) {
-      const f0 = freq(rt, a[0], 20);
-      const f1 = freq(rt, a[1], 20000);
-      const ms = time(a[2], 2000);
-      const curve = word(a[3], 'exponential') === 'linear' ? 'linear' : 'exponential';
-      const wf = waveform(a[4], 'sine');
-      const db = gainDb(a[5], -12);
-      if (ms <= 0) return 0;
-
-      voice(rt, {
-        freq: f0, waveform: wf, gainDb: db, durSec: ms / 1000,
-        ramp: { to: f1, curve },
+      playVoice(runtime_obj, {
+        frequency_hertz_float,
+        waveform_name_str,
+        gain_db_float,
+        pan_position_float,
+        duration_seconds_float: duration_ms_float / 1000,
       });
-      rt.label(`sweep ${formatFrequency(f0)} → ${formatFrequency(f1)} · ${curve}`);
-      rt.log(`↗ sweep ${formatFrequency(f0)} → ${formatFrequency(f1)}  ${curve}  ${formatDuration(ms)}`);
-      return ms;
+      const frequency_str = formatFrequency(frequency_hertz_float);
+      runtime_obj.setLabel(
+        `play ${frequency_str} · ${waveform_name_str} · ` +
+        `${formatDuration(duration_ms_float)}`
+      );
+      runtime_obj.logAt(
+        `▶ ${frequency_str}  ${waveform_name_str}  ` +
+        `${gain_db_float.toFixed(1)} dBFS  ` +
+        `${formatDuration(duration_ms_float)}`
+      );
+      return duration_ms_float;
     },
   },
 
-  /* ---------------------------------------------------------------- */
+  sweep: {
+    signature:
+      'sweep(start_hz, end_hz, duration_ms, ' +
+      "curve['linear'|'exponential'], waveform, gain_db)",
+    help:
+      'Glide between two frequencies. Exponential is constant octaves per ' +
+      'second.',
+    example: 'sweep(20hz, 20khz, 3s, exponential)',
+    run(runtime_obj, arguments_list) {
+      const start_hertz_float =
+        readFrequencyHertz(runtime_obj, arguments_list[0], 20);
+      const end_hertz_float =
+        readFrequencyHertz(runtime_obj, arguments_list[1], 20000);
+      const duration_ms_float = readDurationMs(arguments_list[2], 2000);
+      const curve_str = readWord(arguments_list[3], 'exponential') === 'linear'
+        ? 'linear'
+        : 'exponential';
+      const waveform_name_str = readWaveformName(arguments_list[4], 'sine');
+      const gain_db_float = readGainDb(arguments_list[5], -12);
+      if (duration_ms_float <= 0) {
+        return 0;
+      }
+
+      playVoice(runtime_obj, {
+        frequency_hertz_float: start_hertz_float,
+        waveform_name_str,
+        gain_db_float,
+        duration_seconds_float: duration_ms_float / 1000,
+        ramp_obj: { to_hertz_float: end_hertz_float, curve_str },
+      });
+      const span_str = `${formatFrequency(start_hertz_float)} → ` +
+        `${formatFrequency(end_hertz_float)}`;
+      runtime_obj.setLabel(`sweep ${span_str} · ${curve_str}`);
+      runtime_obj.logAt(
+        `↗ sweep ${span_str}  ${curve_str}  ` +
+        `${formatDuration(duration_ms_float)}`
+      );
+      return duration_ms_float;
+    },
+  },
+
   wait: {
     signature: 'wait(duration_ms)',
     help: 'Silence for a duration. Accepts ms or s suffixes.',
     example: 'wait(250ms)',
-    run(rt, a) {
-      const ms = time(a[0], 250);
-      rt.label(`wait ${formatDuration(ms)}`);
-      return ms;
+    run(runtime_obj, arguments_list) {
+      const duration_ms_float = readDurationMs(arguments_list[0], 250);
+      runtime_obj.setLabel(`wait ${formatDuration(duration_ms_float)}`);
+      return duration_ms_float;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   loop: {
     signature: 'loop(count, [commands])',
     help: 'Repeat a block. Handled by the VM — nesting is supported.',
     example: 'loop(4, [ play(880, 100), wait(150) ])',
-    run() { return 0; }, // never reached; the compiler rewrites loops
-  },
-
-  /* ---------------------------------------------------------------- */
-  burst: {
-    signature: 'burst(frequency, count, on_ms, off_ms, gain_db)',
-    help: 'Pulse train at one frequency — the primitive behind water ejection.',
-    example: 'burst(165hz, 20, 120ms, 60ms, -6db)',
-    run(rt, a) {
-      const f = freq(rt, a[0], 165);
-      const count = clampToRange(Math.round(num(a[1], 8)), 1, 500);
-      const on = time(a[2], 120);
-      const off = time(a[3], 60);
-      const db = gainDb(a[4], -8);
-
-      for (let i = 0; i < count; i++) {
-        const when = rt.when_seconds_float + (i * (on + off)) / 1000;
-        voice(rt, { freq: f, waveform: 'sine', gainDb: db, durSec: on / 1000, when });
-      }
-      const total = count * (on + off);
-      rt.label(`burst ${formatFrequency(f)} ×${count}`);
-      rt.log(`≡ burst ${formatFrequency(f)} ×${count}  ${formatDuration(on)} on / ${formatDuration(off)} off`);
-      return total;
+    // Never reached: the compiler rewrites loops into LOOP/ENDLOOP.
+    run() {
+      return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
+  burst: {
+    signature: 'burst(frequency, count, on_ms, off_ms, gain_db)',
+    help:
+      'Pulse train at one frequency — the primitive behind water ejection.',
+    example: 'burst(165hz, 20, 120ms, 60ms, -6db)',
+    run(runtime_obj, arguments_list) {
+      const frequency_hertz_float =
+        readFrequencyHertz(runtime_obj, arguments_list[0], 165);
+      const pulse_count_int = clampToRange(
+        Math.round(readNumber(arguments_list[1], 8)),
+        MIN_BURST_COUNT_INT,
+        MAX_BURST_COUNT_INT
+      );
+      const on_ms_float = readDurationMs(arguments_list[2], 120);
+      const off_ms_float = readDurationMs(arguments_list[3], 60);
+      const gain_db_float = readGainDb(arguments_list[4], -8);
+
+      for (let pulse_int = 0; pulse_int < pulse_count_int; pulse_int++) {
+        playVoice(runtime_obj, {
+          frequency_hertz_float,
+          waveform_name_str: 'sine',
+          gain_db_float,
+          duration_seconds_float: on_ms_float / 1000,
+          when_seconds_float: runtime_obj.when_seconds_float +
+            (pulse_int * (on_ms_float + off_ms_float)) / 1000,
+        });
+      }
+
+      const frequency_str = formatFrequency(frequency_hertz_float);
+      runtime_obj.setLabel(`burst ${frequency_str} ×${pulse_count_int}`);
+      runtime_obj.logAt(
+        `≡ burst ${frequency_str} ×${pulse_count_int}  ` +
+        `${formatDuration(on_ms_float)} on / ` +
+        `${formatDuration(off_ms_float)} off`
+      );
+      return pulse_count_int * (on_ms_float + off_ms_float);
+    },
+  },
+
   am: {
     signature: 'am(carrier_hz, modulation_hz, duration_ms, depth, gain_db)',
     help:
-      'Amplitude-modulated tone. The envelope rate can be infrasonic even though the carrier is not — ' +
-      'this is the only way ordinary speakers deliver a sub-20 Hz forcing, because they physically ' +
-      'cannot reproduce a sub-20 Hz tone.',
+      'Amplitude-modulated tone. The envelope rate can be infrasonic even ' +
+      'though the carrier is not — this is the only way ordinary speakers ' +
+      'deliver a sub-20 Hz forcing, because they physically cannot ' +
+      'reproduce a sub-20 Hz tone.',
     example: 'am(200hz, 11hz, 30s, 100%, -8db)',
-    run(rt, a) {
-      const carrier = freq(rt, a[0], 200);
-      const modHz = Math.abs(num(a[1], 10));
-      const ms = time(a[2], 10000);
-      const depth = clampToRange(num(a[3], 1), 0, 1);
-      const db = gainDb(a[4], -10);
-      if (ms <= 0) return 0;
+    run(runtime_obj, arguments_list) {
+      const carrier_hertz_float =
+        readFrequencyHertz(runtime_obj, arguments_list[0], 200);
+      const modulation_hertz_float =
+        Math.abs(readNumber(arguments_list[1], 10));
+      const duration_ms_float = readDurationMs(arguments_list[2], 10000);
+      const depth_float =
+        clampToRange(readNumber(arguments_list[3], 1), 0, 1);
+      const gain_db_float = readGainDb(arguments_list[4], -10);
+      if (duration_ms_float <= 0) {
+        return 0;
+      }
 
-      const ctx = rt.ctx;
-      const when = rt.when_seconds_float;
-      const durSec = ms / 1000;
-      const amp = convertDbToLinear(db);
+      playAmplitudeModulated(runtime_obj, {
+        carrier_hertz_float,
+        modulation_hertz_float,
+        depth_float,
+        gain_db_float,
+        duration_seconds_float: duration_ms_float / 1000,
+      });
 
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(clampToRange(carrier, 0.01, ctx.sampleRate / 2 - 1), when);
-
-      // The modulator is an oscillator driving a gain, not a computed envelope:
-      // it stays sample-accurate for the whole run and costs nothing extra.
-      const mod = ctx.createOscillator();
-      mod.type = 'sine';
-      mod.frequency.setValueAtTime(Math.max(modHz, 0.01), when);
-
-      // depth/2 swing around (1 − depth/2) gives 0…1 at full depth.
-      const modDepth = ctx.createGain();
-      modDepth.gain.setValueAtTime((depth / 2) * amp, when);
-
-      const carrierGain = ctx.createGain();
-      carrierGain.gain.setValueAtTime((1 - depth / 2) * amp, when);
-
-      mod.connect(modDepth);
-      modDepth.connect(carrierGain.gain);
-      osc.connect(carrierGain);
-
-      // Outer envelope so the burst itself starts and ends without a click.
-      const env = ctx.createGain();
-      env.gain.setValueAtTime(0, when);
-      env.gain.linearRampToValueAtTime(1, when + Math.min(0.03, durSec * 0.1));
-      env.gain.setValueAtTime(1, when + Math.max(0.04, durSec - 0.05));
-      env.gain.linearRampToValueAtTime(0, when + durSec);
-
-      carrierGain.connect(env);
-      env.connect(rt.engine.channel_bus_node);
-
-      osc.start(when);
-      mod.start(when);
-      osc.stop(when + durSec + 0.03);
-      mod.stop(when + durSec + 0.03);
-      rt.hold(osc, env);
-      rt.hold(mod, null);
-
-      rt.label(`am ${formatFrequency(carrier)} ☉ ${modHz.toFixed(2)} Hz`);
-      rt.log(
-        `≋ AM  carrier ${formatFrequency(carrier)}  envelope ${modHz.toFixed(2)} Hz  ` +
-        `depth ${(depth * 100).toFixed(0)}%  ${formatDuration(ms)}`
+      const carrier_str = formatFrequency(carrier_hertz_float);
+      const modulation_str = modulation_hertz_float.toFixed(2);
+      runtime_obj.setLabel(`am ${carrier_str} ☉ ${modulation_str} Hz`);
+      runtime_obj.logAt(
+        `≋ AM  carrier ${carrier_str}  envelope ${modulation_str} Hz  ` +
+        `depth ${(depth_float * 100).toFixed(0)}%  ` +
+        `${formatDuration(duration_ms_float)}`
       );
-      return ms;
+      return duration_ms_float;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   chord: {
     signature: 'chord("C4,E4,G4", duration_ms, waveform, gain_db)',
     help: 'Play several notes or frequencies simultaneously.',
     example: 'chord("A3,C#4,E4", 1.5s, triangle)',
-    run(rt, a) {
-      const spec = String(argValue(a[0]) ?? 'C4,E4,G4');
-      const ms = time(a[1], 1000);
-      const wf = waveform(a[2], 'sine');
-      const db = gainDb(a[3], -18);
+    run(runtime_obj, arguments_list) {
+      const spec_str =
+        String(readArgumentValue(arguments_list[0]) ?? 'C4,E4,G4');
+      const duration_ms_float = readDurationMs(arguments_list[1], 1000);
+      const waveform_name_str = readWaveformName(arguments_list[2], 'sine');
+      const gain_db_float = readGainDb(arguments_list[3], -18);
 
-      const parts = spec.split(/[,\s/+]+/).filter(Boolean);
-      if (!parts.length || ms <= 0) return 0;
-
-      for (const p of parts) {
-        const f = freq(rt, { kind_str: 'string', value_any: p }, NaN);
-        if (!Number.isFinite(f)) continue;
-        voice(rt, { freq: f, waveform: wf, gainDb: db, durSec: ms / 1000 });
+      const note_names_list =
+        spec_str.split(CHORD_SEPARATOR_REGEX).filter(Boolean);
+      if (!note_names_list.length || duration_ms_float <= 0) {
+        return 0;
       }
-      rt.label(`chord ${parts.join(' ')}`);
-      rt.log(`♫ chord ${parts.join(' ')}  ${formatDuration(ms)}`);
-      return ms;
-    },
-  },
 
-  /* ---------------------------------------------------------------- */
-  dtmf: {
-    signature: 'dtmf("555-0100", tone_ms, gap_ms, gain_db)',
-    help: 'Dual-tone multi-frequency dialling. Non-keypad characters are treated as pauses.',
-    example: 'dtmf("1-800-555-0199", 120ms, 80ms)',
-    run(rt, a) {
-      const digits = String(argValue(a[0]) ?? '').toUpperCase();
-      const toneMs = time(a[1], 120);
-      const gapMs = time(a[2], 80);
-      const db = gainDb(a[3], -14);
-      if (!digits) return 0;
-
-      let offset = 0;
-      let played = 0;
-      for (const ch of digits) {
-        const pair = DTMF_MAP[ch];
-        if (!pair) {
-          if (/[\s\-.,]/.test(ch)) offset += toneMs + gapMs;  // pause
+      for (const note_name_str of note_names_list) {
+        const frequency_hertz_float = readFrequencyHertz(
+          runtime_obj,
+          { kind_str: 'string', value_any: note_name_str },
+          NaN
+        );
+        if (!Number.isFinite(frequency_hertz_float)) {
           continue;
         }
-        const when = rt.when_seconds_float + offset / 1000;
-        voice(rt, { freq: DTMF_ROWS[pair[0]], waveform: 'sine', gainDb: db, durSec: toneMs / 1000, when });
-        voice(rt, { freq: DTMF_COLS[pair[1]], waveform: 'sine', gainDb: db, durSec: toneMs / 1000, when });
-        rt.at(() => rt.app.onDtmfDigit?.(ch), when);
-        offset += toneMs + gapMs;
-        played++;
+        playVoice(runtime_obj, {
+          frequency_hertz_float,
+          waveform_name_str,
+          gain_db_float,
+          duration_seconds_float: duration_ms_float / 1000,
+        });
       }
-      rt.label(`dtmf ${digits}`);
-      rt.log(`☎ dtmf "${digits}"  ${played} digits`);
-      return offset;
+
+      runtime_obj.setLabel(`chord ${note_names_list.join(' ')}`);
+      runtime_obj.logAt(
+        `♫ chord ${note_names_list.join(' ')}  ` +
+        `${formatDuration(duration_ms_float)}`
+      );
+      return duration_ms_float;
     },
   },
 
-  /* ---------------------------------------------------------------- */
+  dtmf: {
+    signature: 'dtmf("555-0100", tone_ms, gap_ms, gain_db)',
+    help:
+      'Dual-tone multi-frequency dialling. Non-keypad characters are ' +
+      'treated as pauses.',
+    example: 'dtmf("1-800-555-0199", 120ms, 80ms)',
+    run(runtime_obj, arguments_list) {
+      const digits_str =
+        String(readArgumentValue(arguments_list[0]) ?? '').toUpperCase();
+      const tone_ms_float = readDurationMs(arguments_list[1], 120);
+      const gap_ms_float = readDurationMs(arguments_list[2], 80);
+      const gain_db_float = readGainDb(arguments_list[3], -14);
+      if (!digits_str) {
+        return 0;
+      }
+
+      let offset_ms_float = 0;
+      let played_count_int = 0;
+
+      for (const character_str of digits_str) {
+        const pair_arr = DTMF_MAP[character_str];
+        if (!pair_arr) {
+          if (DTMF_PAUSE_REGEX.test(character_str)) {
+            offset_ms_float += tone_ms_float + gap_ms_float;
+          }
+          continue;
+        }
+
+        const when_seconds_float =
+          runtime_obj.when_seconds_float + offset_ms_float / 1000;
+        for (const frequency_hertz_float of [
+          DTMF_ROW_HERTZ_TUPLE[pair_arr[0]],
+          DTMF_COLUMN_HERTZ_TUPLE[pair_arr[1]],
+        ]) {
+          playVoice(runtime_obj, {
+            frequency_hertz_float,
+            waveform_name_str: 'sine',
+            gain_db_float,
+            duration_seconds_float: tone_ms_float / 1000,
+            when_seconds_float,
+          });
+        }
+        runtime_obj.scheduleAt(
+          () => runtime_obj.app_obj.onDtmfDigit?.(character_str),
+          when_seconds_float
+        );
+        offset_ms_float += tone_ms_float + gap_ms_float;
+        played_count_int++;
+      }
+
+      runtime_obj.setLabel(`dtmf ${digits_str}`);
+      runtime_obj.logAt(
+        `☎ dtmf "${digits_str}"  ${played_count_int} digits`
+      );
+      return offset_ms_float;
+    },
+  },
+
   tone: {
     signature: 'tone(channel, frequency, gain_db, waveform, pan)',
     help: 'Configure and start one of the 16 rack channels. Non-blocking.',
     example: 'tone(1, 440hz, -15db, sine)',
-    run(rt, a) {
-      const idx = clampToRange(Math.round(num(a[0], 1)), 1, rt.app.rack.channels_list.length) - 1;
-      const f = freq(rt, a[1], 440);
-      const db = gainDb(a[2], -18);
-      const wf = waveform(a[3], 'sine');
-      const pan = clampToRange(num(a[4], 0), -1, 1);
+    run(runtime_obj, arguments_list) {
+      const index_int = readChannelIndex(runtime_obj, arguments_list[0]);
+      const frequency_hertz_float =
+        readFrequencyHertz(runtime_obj, arguments_list[1], 440);
+      const gain_db_float = readGainDb(arguments_list[2], -18);
+      const waveform_name_str = readWaveformName(arguments_list[3], 'sine');
+      const pan_position_float =
+        clampToRange(readNumber(arguments_list[4], 0), -1, 1);
 
-      rt.at(() => {
-        const ch = rt.app.rack.getChannel(idx);
-        if (!ch) return;
-        ch.setWaveformName(wf);
-        ch.setFrequencyHertz(f);
-        ch.setGainDb(db);
-        ch.setPanPosition(pan);
-        if (!ch.is_enabled_bool) ch.start();
+      runtime_obj.scheduleAt(() => {
+        const channel_obj = runtime_obj.app_obj.rack.getChannel(index_int);
+        if (!channel_obj) {
+          return;
+        }
+        channel_obj.setWaveformName(waveform_name_str);
+        channel_obj.setFrequencyHertz(frequency_hertz_float);
+        channel_obj.setGainDb(gain_db_float);
+        channel_obj.setPanPosition(pan_position_float);
+        if (!channel_obj.is_enabled_bool) {
+          channel_obj.start();
+        }
       });
-      rt.label(`ch${idx + 1} ← ${formatFrequency(f)}`);
-      rt.log(`✦ channel ${idx + 1}: ${formatFrequency(f)} ${wf} ${db.toFixed(1)} dBFS`);
+
+      const frequency_str = formatFrequency(frequency_hertz_float);
+      runtime_obj.setLabel(`ch${index_int + 1} ← ${frequency_str}`);
+      runtime_obj.logAt(
+        `✦ channel ${index_int + 1}: ${frequency_str} ` +
+        `${waveform_name_str} ${gain_db_float.toFixed(1)} dBFS`
+      );
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   off: {
     signature: 'off(channel | all)',
     help: 'Stop one rack channel, or every channel.',
     example: 'off(all)',
-    run(rt, a) {
-      const v = argValue(a[0]);
-      rt.at(() => {
-        if (v === undefined || v === 'all' || v === 0) rt.app.rack.stopAllChannels();
-        else rt.app.rack.getChannel(clampToRange(Math.round(Number(v)), 1, 16) - 1)?.stop();
+    run(runtime_obj, arguments_list) {
+      const value_any = readArgumentValue(arguments_list[0]);
+      const is_all_bool =
+        value_any === undefined || value_any === 'all' || value_any === 0;
+
+      runtime_obj.scheduleAt(() => {
+        if (is_all_bool) {
+          runtime_obj.app_obj.rack.stopAllChannels();
+          return;
+        }
+        const index_int =
+          readChannelIndex(runtime_obj, arguments_list[0]);
+        runtime_obj.app_obj.rack.getChannel(index_int)?.stop();
       });
-      rt.label(v === 'all' || v === undefined ? 'off all' : `off ch${v}`);
+
+      runtime_obj.setLabel(is_all_bool ? 'off all' : `off ch${value_any}`);
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   noise: {
     signature: 'noise(colour, gain_db, duration_ms)',
-    help: `Start the noise generator. Colours: ${NOISE_COLOUR_KEYS_LIST.join(', ')}. With a duration it stops itself.`,
+    help:
+      `Start the noise generator. Colours: ` +
+      `${NOISE_COLOUR_KEYS_LIST.join(', ')}. ` +
+      'With a duration it stops itself.',
     example: 'noise(brown, -22db, 10s)',
-    run(rt, a) {
-      const color = word(a[0], 'pink');
-      const db = gainDb(a[1], -24);
-      const ms = num(a[2], 0);
-      const valid = NOISE_COLOUR_KEYS_LIST.includes(color) ? color : 'pink';
+    run(runtime_obj, arguments_list) {
+      const requested_str = readWord(arguments_list[0], 'pink');
+      const colour_str = NOISE_COLOUR_KEYS_LIST.includes(requested_str)
+        ? requested_str
+        : 'pink';
+      const gain_db_float = readGainDb(arguments_list[1], -24);
+      const duration_ms_float = readNumber(arguments_list[2], 0);
 
-      rt.at(async () => {
-        await rt.app.noise.setColour(valid);
-        rt.app.noise.setGainDb(db);
-        await rt.app.noise.start();
+      runtime_obj.scheduleAt(async () => {
+        await runtime_obj.app_obj.noise.setColour(colour_str);
+        runtime_obj.app_obj.noise.setGainDb(gain_db_float);
+        await runtime_obj.app_obj.noise.start();
       });
 
-      if (ms > 0) rt.at(() => rt.app.noise.stop(), rt.when_seconds_float + ms / 1000);
+      if (duration_ms_float > 0) {
+        runtime_obj.scheduleAt(
+          () => runtime_obj.app_obj.noise.stop(),
+          runtime_obj.when_seconds_float + duration_ms_float / 1000
+        );
+      }
 
-      rt.label(`noise ${valid}`);
-      rt.log(`░ noise ${valid} @ ${db.toFixed(1)} dBFS${ms > 0 ? ` for ${formatDuration(ms)}` : ''}`);
-      return ms > 0 ? ms : 0;
+      const for_str = duration_ms_float > 0
+        ? ` for ${formatDuration(duration_ms_float)}`
+        : '';
+      runtime_obj.setLabel(`noise ${colour_str}`);
+      runtime_obj.logAt(
+        `░ noise ${colour_str} @ ${gain_db_float.toFixed(1)} dBFS${for_str}`
+      );
+      return duration_ms_float > 0 ? duration_ms_float : 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   hush: {
     signature: 'hush()',
     help: 'Stop the noise generator.',
     example: 'hush()',
-    run(rt) {
-      rt.at(() => rt.app.noise.stop());
-      rt.label('hush');
+    run(runtime_obj) {
+      runtime_obj.scheduleAt(() => runtime_obj.app_obj.noise.stop());
+      runtime_obj.setLabel('hush');
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   gain: {
     signature: 'gain(db)',
     help: 'Set the master output level in dBFS.',
     example: 'gain(-18db)',
-    run(rt, a) {
-      const db = clampToRange(num(a[0], -12), -90, 6);
-      rt.at(() => { rt.app.engine.masterLevelDb = db; rt.app.syncUi?.(); });
-      rt.label(`gain ${db.toFixed(1)} dBFS`);
-      rt.log(`▤ master ${db.toFixed(1)} dBFS`);
+    run(runtime_obj, arguments_list) {
+      const gain_db_float = clampToRange(
+        readNumber(arguments_list[0], -12),
+        MIN_MASTER_DB_FLOAT,
+        MAX_MASTER_DB_FLOAT
+      );
+
+      runtime_obj.scheduleAt(() => {
+        runtime_obj.app_obj.engine.masterLevelDb = gain_db_float;
+        runtime_obj.app_obj.syncUi?.();
+      });
+      runtime_obj.setLabel(`gain ${gain_db_float.toFixed(1)} dBFS`);
+      runtime_obj.logAt(`▤ master ${gain_db_float.toFixed(1)} dBFS`);
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   set: {
     signature: 'set(parameter, value)',
     help: 'Set a global: a4, shield, blend, limiter, noisepan.',
     example: 'set(a4, 432hz)',
-    run(rt, a) {
-      const key = word(a[0], '');
-      const v = num(a[1], NaN);
-      const app = rt.app;
+    run(runtime_obj, arguments_list) {
+      const key_str = readWord(arguments_list[0], '');
+      const value_float = readNumber(arguments_list[1], NaN);
+      const app_obj = runtime_obj.app_obj;
 
-      rt.at(() => {
-        switch (key) {
-          case 'a4': case 'pitch': case 'TUNING_OBJ':
-            app.tuning.referenceHertz = clampToRange(v, 380, 500); break;
-          case 'shield': case 'vocal':
-            app.noise.setShieldDb(clampToRange(v, -12, 12)); break;
-          case 'blend': case 'hybrid':
-            app.noise.setBlendRatio(clampToRange(v, 0, 1)); break;
-          case 'limiter':
-            app.engine.isLimiterEnabled = !!v; break;
-          case 'noisepan':
-            app.noise.setPanPosition(clampToRange(v, -1, 1)); break;
-          default:
-            app.log?.(`set(): unknown parameter '${key}'`, 'warn');
-        }
-        app.syncUi?.();
+      runtime_obj.scheduleAt(() => {
+        applyGlobalParameter(app_obj, key_str, value_float);
+        app_obj.syncUi?.();
       });
-      rt.label(`set ${key} = ${v}`);
-      rt.log(`⚙ set ${key} = ${v}`);
+      runtime_obj.setLabel(`set ${key_str} = ${value_float}`);
+      runtime_obj.logAt(`⚙ set ${key_str} = ${value_float}`);
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   phase: {
     signature: 'phase(channel, degrees)',
-    help: 'Rotate a channel’s starting phase, 0–360°. Use two channels at 0° and 180° to demonstrate cancellation.',
+    help:
+      'Rotate a channel’s starting phase, 0–360°. Use two channels at 0° ' +
+      'and 180° to demonstrate cancellation.',
     example: 'phase(2, 180deg)',
-    run(rt, a) {
-      const idx = clampToRange(Math.round(num(a[0], 1)), 1, 16) - 1;
-      const deg = num(a[1], 0);
-      rt.at(() => { rt.app.rack.getChannel(idx)?.setPhaseDegrees(deg); rt.app.syncUi?.(); });
-      rt.label(`phase ch${idx + 1} ${Math.round(deg)}°`);
+    run(runtime_obj, arguments_list) {
+      const index_int = readChannelIndex(runtime_obj, arguments_list[0]);
+      const phase_degrees_float = readNumber(arguments_list[1], 0);
+
+      runtime_obj.scheduleAt(() => {
+        runtime_obj.app_obj.rack.getChannel(index_int)
+          ?.setPhaseDegrees(phase_degrees_float);
+        runtime_obj.app_obj.syncUi?.();
+      });
+      runtime_obj.setLabel(
+        `phase ch${index_int + 1} ${Math.round(phase_degrees_float)}°`
+      );
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   print: {
     signature: 'print("message")',
     help: 'Write a line to the terminal log at the moment it is reached.',
     example: 'print("stage 2 complete")',
-    run(rt, a) {
-      const msg = String(argValue(a[0]) ?? '');
-      rt.log(msg, 'ok');
-      rt.label(`print`);
+    run(runtime_obj, arguments_list) {
+      const message_str = String(readArgumentValue(arguments_list[0]) ?? '');
+      runtime_obj.logAt(message_str, 'ok');
+      runtime_obj.setLabel('print');
       return 0;
     },
   },
 
-  /* ---------------------------------------------------------------- */
   stop: {
     signature: 'stop()',
-    help: 'Silence every channel, the noise generator, and any scheduled one-shots.',
+    help:
+      'Silence every channel, the noise generator, and any scheduled ' +
+      'one-shots.',
     example: 'stop()',
-    run(rt) {
-      rt.at(() => {
-        rt.app.rack.stopAllChannels();
-        rt.app.noise.stop();
-        rt.vm.releaseHeldNodes();
-        rt.app.syncUi?.();
+    run(runtime_obj) {
+      runtime_obj.scheduleAt(() => {
+        runtime_obj.app_obj.rack.stopAllChannels();
+        runtime_obj.app_obj.noise.stop();
+        runtime_obj.vm_obj.releaseHeldNodes();
+        runtime_obj.app_obj.syncUi?.();
       });
-      rt.label('stop all');
-      rt.log('■ all sources stopped', 'warn');
+      runtime_obj.setLabel('stop all');
+      runtime_obj.logAt('■ all sources stopped', 'warn');
       return 0;
     },
   },
 };
 
-/** Command names, for autocomplete. */
+/** Command names, in declaration order, for autocomplete. */
 export const COMMAND_NAMES = Object.freeze(Object.keys(COMMANDS));
