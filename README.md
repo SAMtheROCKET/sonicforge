@@ -15,6 +15,8 @@ calibration and a real-time 3D spectrogram — running entirely in your browser.
 
 <img src="assets/demo.gif" alt="The SonicForge interface" width="900">
 
+**[▶ Watch the 34-second demo, with sound](https://samtherocket.github.io/sonicforge/assets/demo.mp4)**
+
 </div>
 
 ---
@@ -107,6 +109,16 @@ sample rate, **48 kHz** if you switch the context to 96 kHz.
 ---
 
 ## Seeing the signal
+
+<div align="center">
+<img src="assets/spectrogram.gif" alt="A 20 Hz to 20 kHz sweep climbing across the 3D spectrogram" width="516">
+</div>
+
+Above: `sweep(20hz, 20khz, 5s, exponential)` typed into the terminal, recorded
+from the live app with the audio playing. Frequency runs on a log axis from
+20 Hz to 20 kHz, level lifts and brightens the surface, and time scrolls away
+from you. The bright ridge is the sweep; the low swell behind it is brown and
+pink noise running underneath. It is raw WebGL2, and you can drag to orbit it.
 
 <div align="center">
 <img src="assets/interference.gif" alt="The interference field showing a 4 Hz beat" width="640">

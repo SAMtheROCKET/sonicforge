@@ -8,6 +8,8 @@
 
 *.png binary
 *.jpg binary
+*.gif binary
+*.mp4 binary
 *.ico binary
 *.woff binary
 *.woff2 binary
