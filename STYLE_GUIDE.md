@@ -160,10 +160,10 @@ A single-line template literal is an ordinary expression and stays checked.
 `lint_style.py` implements this in `find_embedded_content_lines`.
 
 **JSON-LD, data URIs, and CSS values that cannot be split.** JSON forbids a
-literal newline inside a string, so the structured-data block in 
-is unwrappable by construction. A newline inside
-`url("data:…")` changes the value. There is exactly one such declaration in
-the stylesheet, and it carries a comment saying so.
+literal newline inside a string, so the structured-data block in
+`index.html` is unwrappable by construction. A newline inside
+`url("data:…")` likewise changes the value. There is exactly one such CSS
+declaration, and it carries a comment saying so.
 
 **HTML metadata, and one inline break.** A `<meta>` description or an Open
 Graph string is content: rewrapping it changes what search engines and link
