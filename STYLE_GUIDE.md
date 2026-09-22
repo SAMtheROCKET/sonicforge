@@ -175,8 +175,12 @@ inline elements and a newline would render as one.
 Everything else in the markup **is** wrapped: attributes one per line, SVG
 path data at its command separators, flowing text at existing spaces, and
 adjacent inline elements wherever their container is flex (where whitespace
-text nodes are ignored). `index.html` has nine long lines and `tests.html`
-has none.
+text nodes are ignored). `index.html` has twenty-two long lines and
+`tests.html` has none. All twenty-two are accounted for: thirteen are
+strings inside the JSON-LD block, eight are `<meta>` or `<link>` content,
+and one is the status-bar line described above. Counted with
+`awk 'length($0)>79' index.html`, so the number is checkable rather than
+asserted.
 
 That was settled empirically rather than by argument. A probe boots the page,
 records the bounding box of all 111 elements carrying an id plus the total

@@ -989,11 +989,76 @@
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div id="modal-root"></div>
 
+<!--
+  Read by anything that does not run scripts: text-mode browsers, and the
+  many crawlers that parse HTML without executing it. Those see an empty
+  shell otherwise, because every readable string in the interface above is
+  written by a module at boot. Nothing here renders for a visitor with
+  scripting on, so it carries no layout risk and is free to be prose.
+-->
 <noscript>
-  <div style="padding:40px;text-align:center;
-              color:#b9c4dc;font-family:system-ui">
-    <h1 style="color:#00F2FE">SonicForge</h1>
-    <p>This is a real-time audio application and requires JavaScript.</p>
+  <div style="max-width:52em;margin:0 auto;padding:40px;
+              color:#b9c4dc;font-family:system-ui;line-height:1.6">
+    <h2 style="color:#00F2FE;margin-bottom:0">SonicForge</h2>
+    <p style="margin-top:4px;letter-spacing:.18em;font-size:.8em">
+      FORGE ANY FREQUENCY
+    </p>
+
+    <p>
+      A precision audio instrument that runs entirely in the browser.
+      Sixteen independent tone channels, each with its own waveform,
+      level in dBFS, stereo position, starting phase in degrees, detune
+      in cents and glide time. Seven noise colours. Microphone room
+      calibration. A scripting terminal on the audio clock. A real-time
+      WebGL 3D spectrogram. No install, no account, nothing uploaded,
+      and it works offline.
+    </p>
+
+    <p>
+      <b>Frequency range:</b> 0.05 Hz to just under Nyquist &mdash;
+      24 kHz at the default 48 kHz sample rate, or 48 kHz with the
+      audio context switched to 96 kHz. Infrasonic, audible and
+      ultrasonic in one instrument.
+    </p>
+
+    <p>
+      <b>Phase is a real control.</b> The Web Audio oscillator has no
+      phase parameter, so SonicForge builds each waveform from its
+      Fourier coefficients and rotates every harmonic, baking the
+      offset into the wave table. Two channels 180&deg; apart cancel to
+      measured silence.
+    </p>
+
+    <p><b>What people use it for:</b> reference tones at an exact
+      frequency, level and phase; testing speakers, headphones,
+      subwoofers and room response; hearing-range self-tests; pink,
+      brown and white noise for focus, masking and tinnitus relief;
+      ejecting water from a phone speaker after a spill; breaking in
+      new drivers; checking speaker polarity; flame-acoustics and
+      combustion research; beat-frequency and phase-cancellation
+      teaching demonstrations.</p>
+
+    <p>
+      <b>Privacy:</b> there is no backend. No analytics, no telemetry,
+      no cookies, no account. The microphone opens only while a
+      calibration measurement runs and is released in a
+      <code>finally</code> block. No audio is recorded or stored.
+    </p>
+
+    <p>
+      The interface itself is a real-time audio application and needs
+      JavaScript. With scripting enabled this page becomes the
+      instrument.
+    </p>
+
+    <p>
+      <a href="https://github.com/SAMtheROCKET/sonicforge"
+         style="color:#00F2FE">Source and full documentation</a>
+      &middot;
+      <a href="./llms.txt" style="color:#00F2FE">Plain-text summary</a>
+      &middot;
+      <a href="./tests.html" style="color:#00F2FE">Test suite</a>
+    </p>
   </div>
 </noscript>
 
