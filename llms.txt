@@ -7,6 +7,7 @@
 
 **Live:** https://samtherocket.github.io/sonicforge/
 **Source:** https://github.com/SAMtheROCKET/sonicforge
+**Author:** Sambit Supriya Dash (https://github.com/SAMtheROCKET)
 **Licence:** MIT
 **Cost:** Free, no sign-up, no paywall, no advertising.
 

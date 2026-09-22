@@ -11,6 +11,8 @@ calibration and a real-time 3D spectrogram — running entirely in your browser.
 
 `No install` · `No account` · `Nothing uploaded` · `Works offline`
 
+Built by **[Sambit Supriya Dash](https://github.com/SAMtheROCKET)**
+
 <br>
 
 <img src="assets/demo.gif" alt="The SonicForge interface" width="900">
@@ -455,4 +457,5 @@ first; the routine drives the speaker hard on purpose.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Built by Sambit Supriya Dash
+([@SAMtheROCKET](https://github.com/SAMtheROCKET)).
