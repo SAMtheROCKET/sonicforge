@@ -103,8 +103,8 @@ state lives in `localStorage` on the viewer's own device.
 
 Vanilla ES2022 modules. No framework, no bundler, no runtime dependency — the
 application makes zero network requests once loaded, which is what makes the
-offline guarantee real rather than aspirational. 84 modules, each with one
-responsibility, a machine-enforced style guide, and 180 assertions across two
+offline guarantee real rather than aspirational. 76 modules, each with one
+responsibility, a machine-enforced style guide, and 184 assertions across two
 suites that render real audio through `OfflineAudioContext` and measure the
 samples rather than mocking them.
 

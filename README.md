@@ -133,7 +133,7 @@ full amplitude underneath.
 
 Two 60 Hz sines, identical but for phase, with one swept from 0° to 180° and
 back. The verdict tracks the sum the whole way: `constructive +41%` where they
-reinforce, `destructive −99%` at the null. The pale traces underneath are the
+reinforce, `destructive −100%` at the null. The pale traces underneath are the
 individual channels, still at full amplitude while their sum disappears.
 
 That sweep is not available in a browser by default. `OscillatorNode` has no
@@ -292,6 +292,7 @@ tools/
   lint_style.py       enforces STYLE_GUIDE.md
   check_wiring.py     imports resolve, DOM ids exist, tokens defined
   build_precache.py   service-worker manifest
+  capture_visuals.py  regenerates the screenshots and animations
 ```
 
 ### Three decisions worth knowing about
@@ -319,7 +320,7 @@ python server/serve.py
 # then open http://localhost:8080/tests.html
 ```
 
-**111 assertions, no framework.** Nothing is mocked: the noise tests measure the
+**115 assertions, no framework.** Nothing is mocked: the noise tests measure the
 actual spectrum of a generated buffer, and the integration tests render real
 audio through `OfflineAudioContext` and measure the samples.
 
@@ -340,7 +341,7 @@ Web Audio evaluating a `PeriodicWave` as `Σ real·cos + imag·sin`, and a silen
 inverted sign convention would be very hard to notice by ear. So it is asserted
 against the browser's own oscillator.
 
-There is also an application self-test — 53 checks that boot the real app,
+There is also an application self-test — 69 checks that boot the real app,
 exercise every module, and audit the rendered output for `NaN`, clipped panels
 and stale readouts:
 
@@ -381,9 +382,29 @@ One responsibility per module, `<meaning>_<dtype>` variable names, verb-first
 function names, full docstrings on every export, `UPPER_SNAKE` constants after
 the imports, ≤50 code lines per function, ≤79 characters per line.
 
-The style conversion is in progress: the maths, DSP, audio-graph and scripting
-layers are fully converted; `ui/`, `viz/` and the `main.js` decomposition are
-not yet. `lint_style.py --summary` prints the current count.
+Every rule is satisfied across all 76 modules and 27,000 lines;
+`lint_style.py --summary` prints the count, and CI fails the build on any
+violation.
+
+### Regenerating the visuals
+
+```bash
+python server/serve.py                    # in one terminal
+python tools/capture_visuals.py --all     # in another
+```
+
+Headless Chrome renders one frame per invocation under a fixed virtual
+clock, so identical budgets give identical frames. That is what makes the
+animations loop seamlessly and what makes a regenerated asset comparable
+with the one it replaces.
+
+One limitation is worth knowing before you try: the 3D spectrogram, the
+goniometer and the stereo meters all read the live analyser, and headless
+Chrome has no audio device, so every analyser bin reads zero and those
+views render empty. They need a real browser and a screen recorder. The
+interference field is computed analytically from each channel's own
+parameters, which is why it is the one view that is correct without a
+sound card.
 
 ---
 
