@@ -9,6 +9,7 @@
  */
 
 import { buildHudMarkup } from '../app/frame-loop.js';
+import { describeVerdict } from '../viz/interference.js';
 import { restoreSession } from '../app/session.js';
 import {
   CHECKS_LIST,
@@ -158,8 +159,8 @@ function runReadoutChecks(app) {
  * Returns:
  *   (none)
  */
-function runHudSignChecks() {
-  const buildStubApp = (cancellation_ratio_float) => ({
+function buildInterferenceStub(cancellation_ratio_float) {
+  return {
     ui: {
       visualiser: { mode_str: 'interference' },
       interference: {
@@ -170,22 +171,89 @@ function runHudSignChecks() {
         },
       },
     },
-  });
+  };
+}
 
+
+/**
+ * Read the signed percentage out of a readout string.
+ *
+ * Arguments:
+ *   text_str (string): Legend verdict or HUD markup.
+ *
+ * Returns:
+ *   (string): The signed number, or '' when there is none.
+ */
+function extractSignedPercent(text_str) {
+  return text_str.match(/([+−-]?\d+)%/)?.[1] ?? '';
+}
+
+
+/**
+ * The legend and the status HUD report the sum identically.
+ *
+ * Brief:
+ *   These two strings sit in the same panel a few pixels apart and are
+ *   built by different modules from the same number. Asserting them
+ *   against each other, across all three verdict bands, is what stops one
+ *   of them drifting again.
+ *
+ * Arguments:
+ *   (none)
+ *
+ * Returns:
+ *   (none)
+ */
+function runLegendAgreementChecks() {
+  check('the legend and the HUD agree on sign in every band', () => {
+    const mismatches_list = [];
+
+    for (const ratio_float of [0.99, 0.4, 0.02, -0.02, -0.41, -0.9]) {
+      const legend_str = extractSignedPercent(
+        describeVerdict(ratio_float).verdict_str
+      );
+      const hud_str = extractSignedPercent(
+        buildHudMarkup(buildInterferenceStub(ratio_float), -12)
+      );
+      if (legend_str !== hud_str) {
+        mismatches_list.push(
+          `ratio ${ratio_float}: legend ${legend_str}, hud ${hud_str}`
+        );
+      }
+    }
+
+    return verdict(
+      mismatches_list.length === 0,
+      mismatches_list.join('; ') || 'all six ratios agree'
+    );
+  });
+}
+
+
+/**
+ * The HUD sum readout points the way the legend points.
+ *
+ * Arguments:
+ *   (none)
+ *
+ * Returns:
+ *   (none)
+ */
+function runHudSignChecks() {
   check('a cancelling pair reports the sum as down, not up', () => {
-    const markup_str = buildHudMarkup(buildStubApp(0.99), -20);
+    const markup_str = buildHudMarkup(buildInterferenceStub(0.99), -20);
 
     return verdict(markup_str.includes('−99%'), markup_str);
   });
 
   check('a reinforcing pair reports the sum as up', () => {
-    const markup_str = buildHudMarkup(buildStubApp(-0.41), -6);
+    const markup_str = buildHudMarkup(buildInterferenceStub(-0.41), -6);
 
     return verdict(markup_str.includes('+41%'), markup_str);
   });
 
   check('a single voice reports no sum at all', () => {
-    const app_stub_obj = buildStubApp(0);
+    const app_stub_obj = buildInterferenceStub(0);
     app_stub_obj.ui.interference.stats_obj.voice_count_int = 1;
     const markup_str = buildHudMarkup(app_stub_obj, -12);
 
@@ -212,4 +280,5 @@ export function runOutputChecks(app) {
   runTextSanityChecks(app);
   runReadoutChecks(app);
   runHudSignChecks();
+  runLegendAgreementChecks();
 }

@@ -295,31 +295,47 @@ function measureCancellation(
 /**
  * Describe the interference verdict for the legend.
  *
+ * Brief:
+ *   All three branches report one quantity: how the coherent sum compares
+ *   with an incoherent one, as a signed percentage where negative is
+ *   quieter. The stored ratio is a *shortfall*, so it is negated once here
+ *   rather than per branch. It used to be negated in two branches and
+ *   printed raw in the third, which left the middle band disagreeing with
+ *   the two either side of it and with the status HUD below.
+ *
  * Arguments:
  *   cancellation_ratio_float (number): Shortfall against an incoherent sum.
  *
  * Returns:
  *   (Object): { fill_style_str, verdict_str }.
  */
-function describeVerdict(cancellation_ratio_float) {
-  const percent_str = (cancellation_ratio_float * 100).toFixed(0);
+export function describeVerdict(cancellation_ratio_float) {
+  const level_change_float = -cancellation_ratio_float * 100;
+  const magnitude_str = Math.abs(level_change_float).toFixed(0);
 
   if (cancellation_ratio_float > DESTRUCTIVE_THRESHOLD_FLOAT) {
     return {
       fill_style_str: DESTRUCTIVE_FILL_STR,
-      verdict_str: `destructive  −${percent_str}%`,
+      verdict_str: `destructive  −${magnitude_str}%`,
     };
   }
   if (cancellation_ratio_float < CONSTRUCTIVE_THRESHOLD_FLOAT) {
-    const positive_str = (-cancellation_ratio_float * 100).toFixed(0);
     return {
       fill_style_str: CONSTRUCTIVE_FILL_STR,
-      verdict_str: `constructive  +${positive_str}%`,
+      verdict_str: `constructive  +${magnitude_str}%`,
     };
+  }
+
+  let sign_str = '';
+  if (level_change_float > 0.5) {
+    sign_str = '+';
+  }
+  if (level_change_float < -0.5) {
+    sign_str = '−';
   }
   return {
     fill_style_str: LEGEND_FILL_STR,
-    verdict_str: `incoherent  ${percent_str}%`,
+    verdict_str: `incoherent  ${sign_str}${magnitude_str}%`,
   };
 }
 
