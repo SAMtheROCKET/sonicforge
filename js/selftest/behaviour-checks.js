@@ -30,6 +30,52 @@ import {
  */
 
 /**
+ * The rack relocking a retuned channel by itself.
+ *
+ * Brief:
+ *   The unit suite proves a relock cancels exactly, but it calls the relock
+ *   by hand, because no timer can drive an offline render. This drives the
+ *   live context and waits for the rack's own timer to do it.
+ *
+ * Arguments:
+ *   app (Object): The application facade.
+ *
+ * Returns:
+ *   (Promise<void>)
+ */
+async function runPhaseLockChecks(app) {
+  const first_obj = app.rack.getChannel(0);
+  const second_obj = app.rack.getChannel(1);
+  first_obj.setFrequencyHertz(440);
+  second_obj.setFrequencyHertz(660);
+  first_obj.start();
+  second_obj.start();
+  second_obj.setFrequencyHertz(440);
+  const is_pending_bool = second_obj.needs_phase_relock_bool;
+
+  await sleep(300);
+  const first_voice_obj = first_obj.voice_obj;
+  const second_voice_obj = second_obj.voice_obj;
+  const is_relocked_bool = !first_obj.needs_phase_relock_bool &&
+    !second_obj.needs_phase_relock_bool;
+  const is_shared_frame_bool = Boolean(first_voice_obj && second_voice_obj) &&
+    first_voice_obj.start_seconds_float ===
+      second_voice_obj.start_seconds_float &&
+    first_voice_obj.anchor_degrees_float ===
+      second_voice_obj.anchor_degrees_float;
+  first_obj.stop();
+  second_obj.stop();
+
+  check('a retuned channel relocks to the audio clock by itself', () =>
+    verdict(
+      is_pending_bool && is_relocked_bool && is_shared_frame_bool,
+      `pending ${is_pending_bool} · relocked ${is_relocked_bool} · ` +
+        `shared frame ${is_shared_frame_bool}`
+    )
+  );
+}
+
+/**
  * Channel start, stop and row fields.
  *
  * Arguments:
@@ -503,6 +549,7 @@ function runAddToneChecks(app) {
  */
 export async function runBehaviourChecks(app) {
   runChannelChecks(app);
+  await runPhaseLockChecks(app);
   runTuningChecks(app);
   await runScriptChecks(app);
   await runCommandChecks(app);

@@ -40,8 +40,14 @@ export function buildChannelPanel(app_obj) {
     { on_select_fn: () => app_obj.ui.oscillator?.sync() }
   );
 
-  app_obj.rack.on('change', () => {
+  app_obj.rack.on('change', (channel_obj) => {
     app_obj.ui.header?.sync();
+    // A change can come from a row field, a script or a preset, not only
+    // from the oscillator panel itself. Without this the big readout kept
+    // showing a frequency the selected channel had already left.
+    if (!channel_obj || channel_obj === app_obj.selectedChannel) {
+      app_obj.ui.oscillator?.sync({ is_typing_kept_bool: true });
+    }
     persistSoon(app_obj);
   });
 

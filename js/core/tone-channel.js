@@ -11,8 +11,15 @@
  *   specification, and once stopped it can never be restarted. Holding one
  *   to "reuse later" produces a channel that silently never sounds again.
  *
+ *   A channel's phase is measured against the audio clock (phase-lock.js).
+ *   Retuning a running oscillator glides its phase off that reference. So
+ *   once the new frequency settles, the rack has the channel build a fresh
+ *   voice on a shared frame and crossfade to it. Each oscillator therefore
+ *   has a gain of its own, and the old voice fades out through it while
+ *   the new one fades in.
+ *
  *   Signal path:
- *     oscillator -> gain -> panner -> meter analyser -> rack bus
+ *     oscillator -> voice gain -> gain -> panner -> meter analyser -> bus
  */
 
 import { Emitter } from '../util/events.js';
@@ -23,7 +30,7 @@ import {
 } from '../util/amplitude.js';
 import { clampToRange } from '../util/numeric.js';
 import {
-  applyWaveform,
+  applyRotatedWaveform,
   normalisePhaseDegrees,
   WAVEFORM_KEYS_LIST,
 } from './waveforms.js';
@@ -32,6 +39,11 @@ import {
   captureChannelState,
   restoreChannelState,
 } from './channel-serialisation.js';
+import {
+  computeClockPhaseDegrees,
+  computeStartFrame,
+  convertFrameToStartSeconds,
+} from './phase-lock.js';
 
 /* ---------------------------------------------------------------------------
  * Constants
@@ -70,6 +82,19 @@ const CHANNEL_METER_FFT_SIZE_INT = 256;
 
 /** Smoothing applied to the per-channel meter. */
 const CHANNEL_METER_SMOOTHING_FLOAT = 0.5;
+
+/** Time constant of an unglided frequency change, in seconds. */
+const FREQUENCY_SMOOTHING_SECONDS_FLOAT = SMOOTHING_TIME_CONSTANT_FLOAT * 0.4;
+
+/**
+ * Time constants after which a smoothed parameter counts as arrived.
+ *
+ * Seven leave under a thousandth of the step still to travel.
+ */
+const SETTLE_TIME_CONSTANTS_FLOAT = 7;
+
+/** Crossfade from the old voice to the new one on a relock, in seconds. */
+const RELOCK_CROSSFADE_SECONDS_FLOAT = 0.012;
 
 /* ------------------------------------------------------------------------ */
 
@@ -112,8 +137,21 @@ export class ToneChannel extends Emitter {
     this.is_soloed_bool = false;
     this.is_silenced_by_solo_bool = false;
 
-    this.oscillator_node = null;
+    /** The sounding voice: oscillator, voice gain and clock angle. */
+    this.voice_obj = null;
+    /** A voice still fading out after a relock, if any. */
+    this.outgoing_voice_obj = null;
+    /** Context time the current frequency automation finishes. */
+    this.phase_settle_seconds_float = -Infinity;
+    /** Whether the running voice may have drifted off the audio clock. */
+    this.needs_phase_relock_bool = false;
+
     this.#buildOutputNodes();
+  }
+
+  /** The sounding oscillator, or null while the channel is stopped. */
+  get oscillator_node() {
+    return this.voice_obj ? this.voice_obj.oscillator_node : null;
   }
 
   /** Build the permanent nodes between the oscillator and the rack bus. */
@@ -155,41 +193,138 @@ export class ToneChannel extends Emitter {
    *
    * Warning:
    *   Calling this on a running channel discards the current oscillator and
-   *   builds a new one, which restarts the waveform from its chosen phase.
+   *   builds a new one. The start is rounded up to a whole sample frame,
+   *   which the phase definition needs, so it can land up to one sample
+   *   after the time asked for.
    */
   start(when_seconds_float = null) {
     const context_obj = this.engine_obj.context_obj;
-    const start_seconds_float =
-      when_seconds_float ?? context_obj.currentTime;
+    const now_seconds_float = context_obj.currentTime;
+    const start_frame_int = computeStartFrame(
+      when_seconds_float ?? now_seconds_float,
+      now_seconds_float,
+      context_obj.sampleRate
+    );
+    const start_seconds_float = convertFrameToStartSeconds(
+      start_frame_int, context_obj.sampleRate
+    );
 
-    if (this.oscillator_node) {
-      this.#discardOscillator(start_seconds_float);
+    if (this.voice_obj) {
+      this.#discardVoices();
     }
 
-    const oscillator_node = context_obj.createOscillator();
-    applyWaveform(
-      oscillator_node,
-      this.waveform_name_str,
-      this.phase_degrees_int
-    );
-    oscillator_node.frequency.setValueAtTime(
-      this.#clampFrequency(this.frequency_hertz_float),
-      start_seconds_float
-    );
-    oscillator_node.detune.setValueAtTime(
-      this.detune_cents_float,
-      start_seconds_float
-    );
-    oscillator_node.connect(this.gain_node);
-    oscillator_node.start(start_seconds_float);
-
-    this.oscillator_node = oscillator_node;
+    this.voice_obj = this.#buildVoice(start_frame_int);
     this.is_enabled_bool = true;
     this.#rampGainIn(start_seconds_float);
+    this.#markRetuned(start_seconds_float);
 
     this.emit('start', this);
     this.emit('change', this);
     return this;
+  }
+
+  /**
+   * Rebuild the running voice on a given frame, crossfading to it.
+   *
+   * Brief:
+   *   Called by the rack once this channel's frequency has settled. The new
+   *   voice is rotated to agree with the audio clock at that frame, so any
+   *   phase drift picked up while retuning is gone once the crossfade ends.
+   *
+   * Arguments:
+   *   start_frame_int (number): Sample frame the new voice starts on. It
+   *     must still be in the future when the audio thread reaches it.
+   *
+   * Returns:
+   *   (ToneChannel): This channel, for chaining.
+   *
+   * Warning:
+   *   If the old voice had drifted by nearly 180°, the crossfade passes
+   *   through a brief dip in level. That is the cost of relocking, and it
+   *   is paid once, just after a retune.
+   */
+  relockPhase(start_frame_int) {
+    if (!this.voice_obj) {
+      return this;
+    }
+
+    const incoming_voice_obj = this.#buildVoice(start_frame_int);
+    const start_seconds_float = incoming_voice_obj.start_seconds_float;
+    const end_seconds_float =
+      start_seconds_float + RELOCK_CROSSFADE_SECONDS_FLOAT;
+
+    const incoming_gain_param = incoming_voice_obj.voice_gain_node.gain;
+    incoming_gain_param.setValueAtTime(0, start_seconds_float);
+    incoming_gain_param.linearRampToValueAtTime(1, end_seconds_float);
+
+    if (this.outgoing_voice_obj) {
+      this.#releaseVoice(this.outgoing_voice_obj, start_seconds_float);
+    }
+    const outgoing_gain_param = this.voice_obj.voice_gain_node.gain;
+    outgoing_gain_param.cancelScheduledValues(start_seconds_float);
+    outgoing_gain_param.setValueAtTime(1, start_seconds_float);
+    outgoing_gain_param.linearRampToValueAtTime(0, end_seconds_float);
+    this.#releaseVoice(
+      this.voice_obj, end_seconds_float + TEARDOWN_SECONDS_FLOAT
+    );
+
+    this.outgoing_voice_obj = this.voice_obj;
+    this.voice_obj = incoming_voice_obj;
+    this.needs_phase_relock_bool = false;
+    return this;
+  }
+
+  /** Build an oscillator and its voice gain, locked to the audio clock. */
+  #buildVoice(start_frame_int) {
+    const context_obj = this.engine_obj.context_obj;
+    const start_seconds_float = convertFrameToStartSeconds(
+      start_frame_int, context_obj.sampleRate
+    );
+    const frequency_hertz_float =
+      this.#clampFrequency(this.frequency_hertz_float);
+    const anchor_degrees_float = computeClockPhaseDegrees(
+      frequency_hertz_float,
+      this.detune_cents_float,
+      start_frame_int,
+      context_obj.sampleRate
+    );
+
+    const oscillator_node = context_obj.createOscillator();
+    applyRotatedWaveform(
+      oscillator_node,
+      this.waveform_name_str,
+      anchor_degrees_float + this.phase_degrees_int
+    );
+    oscillator_node.frequency.setValueAtTime(
+      frequency_hertz_float, start_seconds_float
+    );
+    oscillator_node.detune.setValueAtTime(
+      this.detune_cents_float, start_seconds_float
+    );
+
+    const voice_gain_node = context_obj.createGain();
+    oscillator_node.connect(voice_gain_node);
+    voice_gain_node.connect(this.gain_node);
+    oscillator_node.start(start_seconds_float);
+
+    return {
+      oscillator_node,
+      voice_gain_node,
+      anchor_degrees_float,
+      start_seconds_float,
+    };
+  }
+
+  /** Every voice still producing sound: the current one and any fading. */
+  #listLiveVoices() {
+    return [this.voice_obj, this.outgoing_voice_obj].filter(Boolean);
+  }
+
+  /** Record that a retune finishes at a time, and tell the rack. */
+  #markRetuned(settle_seconds_float) {
+    this.phase_settle_seconds_float = settle_seconds_float;
+    this.needs_phase_relock_bool = true;
+    this.emit('retune', this);
   }
 
   /** Ramp the gain up from silence, avoiding a start click. */
@@ -213,7 +348,7 @@ export class ToneChannel extends Emitter {
    *   (ToneChannel): This channel, for chaining.
    */
   stop(when_seconds_float = null) {
-    if (!this.oscillator_node) {
+    if (!this.voice_obj) {
       this.is_enabled_bool = false;
       this.emit('change', this);
       return this;
@@ -229,24 +364,14 @@ export class ToneChannel extends Emitter {
       stop_seconds_float + RELEASE_SECONDS_FLOAT
     );
 
-    const oscillator_node = this.oscillator_node;
-    this.oscillator_node = null;
-    try {
-      oscillator_node.stop(stop_seconds_float + TEARDOWN_SECONDS_FLOAT);
-      oscillator_node.onended = () => {
-        try {
-          oscillator_node.disconnect();
-        } catch {
-          // Already torn down by a context close; nothing to do.
-        }
-      };
-    } catch {
-      try {
-        oscillator_node.disconnect();
-      } catch {
-        // Already disconnected.
-      }
+    for (const voice_obj of this.#listLiveVoices()) {
+      this.#releaseVoice(
+        voice_obj, stop_seconds_float + TEARDOWN_SECONDS_FLOAT
+      );
     }
+    this.voice_obj = null;
+    this.outgoing_voice_obj = null;
+    this.needs_phase_relock_bool = false;
 
     this.is_enabled_bool = false;
     this.emit('stop', this);
@@ -254,19 +379,46 @@ export class ToneChannel extends Emitter {
     return this;
   }
 
-  /** Discard the current oscillator immediately, without a release. */
-  #discardOscillator(at_seconds_float) {
-    const oscillator_node = this.oscillator_node;
-    this.oscillator_node = null;
-    if (!oscillator_node) {
-      return;
-    }
+  /** Stop a voice at a time, and disconnect it once it has ended. */
+  #releaseVoice(voice_obj, stop_seconds_float) {
+    const { oscillator_node, voice_gain_node } = voice_obj;
+    const disconnectVoice = () => {
+      if (this.outgoing_voice_obj === voice_obj) {
+        this.outgoing_voice_obj = null;
+      }
+      try {
+        oscillator_node.disconnect();
+        voice_gain_node.disconnect();
+      } catch {
+        // Already torn down by a context close; nothing to do.
+      }
+    };
+
     try {
-      oscillator_node.stop(at_seconds_float);
-      oscillator_node.disconnect();
+      oscillator_node.stop(stop_seconds_float);
+      oscillator_node.onended = disconnectVoice;
     } catch {
-      // The node may already have ended; either way it is finished with.
+      disconnectVoice();
     }
+  }
+
+  /** Discard every voice immediately, without a release. */
+  #discardVoices() {
+    for (const voice_obj of this.#listLiveVoices()) {
+      try {
+        voice_obj.oscillator_node.stop();
+      } catch {
+        // The node may already have ended; either way it is finished with.
+      }
+      try {
+        voice_obj.oscillator_node.disconnect();
+        voice_obj.voice_gain_node.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    }
+    this.voice_obj = null;
+    this.outgoing_voice_obj = null;
   }
 
   /**
@@ -315,7 +467,9 @@ export class ToneChannel extends Emitter {
    *
    * Warning:
    *   Glide uses an exponential ramp, which cannot pass through or reach
-   *   zero. The frequency is therefore floored just above it.
+   *   zero. The frequency is therefore floored just above it. A running
+   *   channel leaves the audio clock's phase while it moves, and the rack
+   *   relocks it once the move has settled.
    */
   setFrequencyHertz(frequency_hertz_float, options_obj = {}) {
     const {
@@ -325,32 +479,48 @@ export class ToneChannel extends Emitter {
 
     this.frequency_hertz_float = this.#clampFrequency(frequency_hertz_float);
 
-    if (this.oscillator_node) {
+    if (this.voice_obj) {
       const at_seconds_float =
         when_seconds_float ?? this.engine_obj.context_obj.currentTime;
-      const frequency_param = this.oscillator_node.frequency;
-      frequency_param.cancelScheduledValues(at_seconds_float);
-
-      if (glide_ms_float > 0) {
-        frequency_param.setValueAtTime(
-          Math.max(frequency_param.value, MIN_FREQUENCY_HERTZ_FLOAT),
-          at_seconds_float
-        );
-        frequency_param.exponentialRampToValueAtTime(
-          this.frequency_hertz_float,
-          at_seconds_float + glide_ms_float / 1000
-        );
-      } else {
-        frequency_param.setTargetAtTime(
-          this.frequency_hertz_float,
+      for (const voice_obj of this.#listLiveVoices()) {
+        this.#scheduleFrequencyMove(
+          voice_obj.oscillator_node.frequency,
           at_seconds_float,
-          SMOOTHING_TIME_CONSTANT_FLOAT * 0.4
+          glide_ms_float
         );
       }
+      this.#markRetuned(
+        glide_ms_float > 0
+          ? at_seconds_float + glide_ms_float / 1000
+          : at_seconds_float +
+            SETTLE_TIME_CONSTANTS_FLOAT * FREQUENCY_SMOOTHING_SECONDS_FLOAT
+      );
     }
 
     this.emit('change', this);
     return this;
+  }
+
+  /** Move one oscillator's frequency to the channel's, gliding or not. */
+  #scheduleFrequencyMove(frequency_param, at_seconds_float, glide_ms_float) {
+    frequency_param.cancelScheduledValues(at_seconds_float);
+
+    if (glide_ms_float > 0) {
+      frequency_param.setValueAtTime(
+        Math.max(frequency_param.value, MIN_FREQUENCY_HERTZ_FLOAT),
+        at_seconds_float
+      );
+      frequency_param.exponentialRampToValueAtTime(
+        this.frequency_hertz_float,
+        at_seconds_float + glide_ms_float / 1000
+      );
+    } else {
+      frequency_param.setTargetAtTime(
+        this.frequency_hertz_float,
+        at_seconds_float,
+        FREQUENCY_SMOOTHING_SECONDS_FLOAT
+      );
+    }
   }
 
   /**
@@ -377,9 +547,10 @@ export class ToneChannel extends Emitter {
       when_seconds_float ?? this.engine_obj.context_obj.currentTime;
     const target_float = this.#clampFrequency(target_hertz_float);
     const duration_seconds_float = Math.max(0.001, duration_ms_float / 1000);
+    const end_seconds_float = at_seconds_float + duration_seconds_float;
 
-    if (this.oscillator_node) {
-      const frequency_param = this.oscillator_node.frequency;
+    for (const voice_obj of this.#listLiveVoices()) {
+      const frequency_param = voice_obj.oscillator_node.frequency;
       frequency_param.cancelScheduledValues(at_seconds_float);
       frequency_param.setValueAtTime(
         Math.max(this.frequency_hertz_float, MIN_FREQUENCY_HERTZ_FLOAT),
@@ -388,18 +559,20 @@ export class ToneChannel extends Emitter {
 
       if (curve_name_str === 'linear') {
         frequency_param.linearRampToValueAtTime(
-          target_float,
-          at_seconds_float + duration_seconds_float
+          target_float, end_seconds_float
         );
       } else {
         frequency_param.exponentialRampToValueAtTime(
           Math.max(target_float, MIN_FREQUENCY_HERTZ_FLOAT),
-          at_seconds_float + duration_seconds_float
+          end_seconds_float
         );
       }
     }
 
     this.frequency_hertz_float = target_float;
+    if (this.voice_obj) {
+      this.#markRetuned(end_seconds_float);
+    }
     this.emit('change', this);
     return this;
   }
@@ -485,31 +658,38 @@ export class ToneChannel extends Emitter {
   }
 
   /**
-   * Set the starting phase of this channel's waveform.
+   * Set this channel's phase against the audio clock.
    *
    * Brief:
    *   Phase is baked into the wave table, so changing it on a running
-   *   oscillator rotates the output immediately. Small increments from a
-   *   slider drag are inaudible; a large jump produces a deliberate and
-   *   informative discontinuity.
+   *   oscillator rotates the output immediately. Each voice keeps the clock
+   *   angle it was built with, and the new table is that angle plus the new
+   *   phase. A move from 0° to 180° is then exactly half a turn. Small
+   *   increments from a slider drag are inaudible; a large jump produces a
+   *   deliberate and informative discontinuity.
    *
    * Arguments:
-   *   phase_degrees_float (number): Starting phase, 0 through 360.
+   *   phase_degrees_float (number): Phase, 0 through 360.
    *
    * Returns:
    *   (ToneChannel): This channel, for chaining.
    */
   setPhaseDegrees(phase_degrees_float) {
     this.phase_degrees_int = normalisePhaseDegrees(phase_degrees_float);
-    if (this.oscillator_node) {
-      applyWaveform(
-        this.oscillator_node,
-        this.waveform_name_str,
-        this.phase_degrees_int
-      );
-    }
+    this.#applyVoiceTables();
     this.emit('change', this);
     return this;
+  }
+
+  /** Rewrite every live voice's table for the current waveform and phase. */
+  #applyVoiceTables() {
+    for (const voice_obj of this.#listLiveVoices()) {
+      applyRotatedWaveform(
+        voice_obj.oscillator_node,
+        this.waveform_name_str,
+        voice_obj.anchor_degrees_float + this.phase_degrees_int
+      );
+    }
   }
 
   /**
@@ -553,11 +733,7 @@ export class ToneChannel extends Emitter {
       0,
       now_seconds_float + TIMBRE_DIP_DOWN_SECONDS_FLOAT
     );
-    applyWaveform(
-      this.oscillator_node,
-      this.waveform_name_str,
-      this.phase_degrees_int
-    );
+    this.#applyVoiceTables();
     gain_param.linearRampToValueAtTime(
       target_linear_float,
       now_seconds_float + TIMBRE_DIP_UP_SECONDS_FLOAT
@@ -580,13 +756,20 @@ export class ToneChannel extends Emitter {
       MAX_DETUNE_CENTS_FLOAT
     );
 
-    if (this.oscillator_node) {
+    if (this.voice_obj) {
       const now_seconds_float = this.engine_obj.context_obj.currentTime;
-      this.oscillator_node.detune.cancelScheduledValues(now_seconds_float);
-      this.oscillator_node.detune.setTargetAtTime(
-        this.detune_cents_float,
-        now_seconds_float,
-        SMOOTHING_TIME_CONSTANT_FLOAT
+      for (const voice_obj of this.#listLiveVoices()) {
+        const detune_param = voice_obj.oscillator_node.detune;
+        detune_param.cancelScheduledValues(now_seconds_float);
+        detune_param.setTargetAtTime(
+          this.detune_cents_float,
+          now_seconds_float,
+          SMOOTHING_TIME_CONSTANT_FLOAT
+        );
+      }
+      this.#markRetuned(
+        now_seconds_float +
+          SETTLE_TIME_CONSTANTS_FLOAT * SMOOTHING_TIME_CONSTANT_FLOAT
       );
     }
 

@@ -12,7 +12,7 @@
  */
 
 self.__SONICFORGE_PRECACHE = {
-  version: '74c5a2d57f02',
+  version: '7b06a1824362',
   files: [
     './assets/icon.svg',
     './assets/logo-mark.svg',
@@ -43,6 +43,7 @@ self.__SONICFORGE_PRECACHE = {
     './js/core/master-meter.js',
     './js/core/noise-generator.js',
     './js/core/output-device.js',
+    './js/core/phase-lock.js',
     './js/core/room-calibrator.js',
     './js/core/tone-channel.js',
     './js/core/tuning.js',

@@ -254,6 +254,10 @@ import {
 import { makeRoomCode } from './js/sync/transport.js';
 import { encodeSignal, decodeSignal } from './js/sync/signal-codec.js';
 import { foldPhaseIntoChannels } from './js/sync/concert.js';
+import { ChannelRack } from './js/core/channel-rack.js';
+import {
+  computeClockPhaseDegrees, computeStartFrame, convertFrameToStartSeconds,
+} from './js/core/phase-lock.js';
 
 /* =========================================================================
    Helpers
@@ -1205,6 +1209,128 @@ suite('web audio integration', () => {
     note(`L ${l.toFixed(4)} · R ${r.toFixed(4)}`);
     ok(l > 0.9, 'hard left must retain full amplitude on the left');
     ok(r < 0.001, 'and produce silence on the right');
+  });
+});
+
+/* =========================================================================
+   SUITE — core/phase-lock
+
+   Phase is defined against the audio clock, so it must survive a channel
+   being retuned while it plays. These drive a real ChannelRack through an
+   OfflineAudioContext, acting at fixed render times with suspend().
+   ========================================================================= */
+
+/** Level of one centred −18 dBFS channel on either output. */
+const LOCK_SINGLE_PEAK = 10 ** (-18 / 20) * Math.SQRT1_2;
+
+/**
+ * Replay the sequence from the demo recording.
+ *
+ * Channel 1 plays 440 Hz. Channel 2 joins at 660 Hz and is retuned to 444,
+ * then 440, while playing, and its phase is later set to `phase`. Pass
+ * relock=false to skip the relock and measure the drift it removes.
+ */
+async function renderRetunedPair({ relock = true, phase = 180 } = {}) {
+  const ctx = new OfflineAudioContext(2, RATE, RATE);
+  const engine = {
+    context_obj: ctx,
+    channel_bus_node: ctx.destination,
+    maxFrequencyHertz: RATE / 2,
+  };
+  const rack = new ChannelRack(engine, 2);
+  const [a, b] = rack.channels_list;
+  const at = (seconds, fn) => ctx.suspend(seconds).then(() => {
+    try { fn(); } finally { ctx.resume(); }
+  });
+
+  a.setFrequencyHertz(440);
+  a.start(0);
+  at(0.1, () => { b.setFrequencyHertz(660); b.start(); });
+  at(0.2, () => b.setFrequencyHertz(444));
+  at(0.3, () => b.setFrequencyHertz(440));
+  if (relock) at(0.4, () => rack.relockChannelPhases());
+  at(0.5, () => b.setPhaseDegrees(phase));
+
+  const buf = await ctx.startRendering();
+  const left = buf.getChannelData(0);
+  return {
+    before: peakOf(left.subarray(0.45 * RATE, 0.5 * RATE)),
+    after: peakOf(left.subarray(0.55 * RATE)),
+  };
+}
+
+suite('core/phase-lock', () => {
+  test('the clock angle is the fraction of a cycle swept', () => {
+    eq(computeClockPhaseDegrees(440, 0, RATE, RATE), 0,
+      '440 whole cycles in one second');
+    close(computeClockPhaseDegrees(375, 0, 64, RATE), 180, 1e-9,
+      '375 Hz is half a cycle at frame 64');
+    close(computeClockPhaseDegrees(375, 1200, 64, RATE), 0, 1e-9,
+      '+1200 cents doubles the frequency to a whole cycle');
+  });
+
+  test('starts round up to a whole frame, never into the past', () => {
+    eq(computeStartFrame(0.5, 0, RATE), 24000);
+    eq(computeStartFrame(0.1, 0.25, RATE), 12000,
+      'a time already past starts now');
+    ok(convertFrameToStartSeconds(0, RATE) === 0,
+      'frame 0 must not become a negative start time');
+  });
+
+  test('a channel retuned while playing still cancels at 180°',
+    async () => {
+    const locked = await renderRetunedPair();
+    const drifted = await renderRetunedPair({ relock: false });
+    note(`residual ${locked.after.toExponential(2)} with the relock, ` +
+      `${drifted.after.toFixed(3)} without`);
+
+    close(locked.before, 2 * LOCK_SINGLE_PEAK, 0.01 * LOCK_SINGLE_PEAK,
+      'at 0° the relocked pair must add to exactly twice one channel');
+    ok(locked.after < 1e-4,
+      `at 180° the pair must cancel; residual was ${locked.after}`);
+    ok(drifted.after > 0.1 * LOCK_SINGLE_PEAK,
+      'control: without the relock the retune must leave a residue, ' +
+        'or this scenario is not exercising the drift at all');
+  });
+
+  test('a 90° offset between locked channels sums to √2', async () => {
+    const { after } = await renderRetunedPair({ phase: 90 });
+    close(after, Math.SQRT2 * LOCK_SINGLE_PEAK, 0.01 * LOCK_SINGLE_PEAK,
+      'two equal sines 90° apart peak at √2 times one');
+  });
+
+  test('relocking a channel already on the clock is seamless',
+    async () => {
+    const ctx = new OfflineAudioContext(1, RATE / 2, RATE);
+    const engine = {
+      context_obj: ctx,
+      channel_bus_node: ctx.destination,
+      maxFrequencyHertz: RATE / 2,
+    };
+    const rack = new ChannelRack(engine, 1);
+    const [a] = rack.channels_list;
+    a.setFrequencyHertz(440);
+    a.start(0);
+    // Assert only after rendering: a throw in here would skip resume()
+    // and hang the render instead of failing the test.
+    let relocked = 0;
+    ctx.suspend(0.2).then(() => {
+      relocked = rack.relockChannelPhases();
+      ctx.resume();
+    });
+    const out = (await ctx.startRendering()).getChannelData(0);
+    eq(relocked, 1, 'a freshly started channel must relock');
+
+    // Peak of every 5 ms window from 0.1 s on, spanning the crossfade.
+    const windows = [];
+    for (let at = 0.1 * RATE; at + 240 <= out.length; at += 240) {
+      windows.push(peakOf(out.subarray(at, at + 240)));
+    }
+    const lowest = Math.min(...windows);
+    const highest = Math.max(...windows);
+    note(`window peaks ${lowest.toFixed(5)}…${highest.toFixed(5)}`);
+    ok(highest - lowest < 0.005 * LOCK_SINGLE_PEAK,
+      'the crossfade between two locked copies must not dip');
   });
 });
 

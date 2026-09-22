@@ -59,7 +59,7 @@ jobs:
         run: python tools/build_precache.py --check
 
       - name: Style guide
-        # Blocking. Every rule in STYLE_GUIDE.md is satisfied across all 76
+        # Blocking. Every rule in STYLE_GUIDE.md is satisfied across all 77
         # files, so any violation this reports is a regression introduced by
         # the push being tested, not pre-existing debt.
         run: python tools/lint_style.py --summary
