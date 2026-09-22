@@ -6,11 +6,16 @@
  *   every channel at once - solo masking, stopping everything, finding a
  *   free slot, saving the whole state - lives here. Keeping that separation
  *   is what stops a channel from needing a reference back to its rack.
+ *
+ *   Phase is one of those rules. A channel's phase only means something
+ *   against the other channels, so relocking a retuned channel to the
+ *   audio clock is scheduled here, across the whole rack at once.
  */
 
 import { Emitter } from '../util/events.js';
 import { SILENCE_THRESHOLD_DB_FLOAT } from '../util/amplitude.js';
 import { ToneChannel } from './tone-channel.js';
+import { PhaseRelockScheduler } from './phase-lock.js';
 
 /* ---------------------------------------------------------------------------
  * Constants
@@ -68,6 +73,8 @@ export class ChannelRack extends Emitter {
   constructor(engine_obj, channel_count_int = CHANNEL_COUNT_INT) {
     super();
     this.engine_obj = engine_obj;
+    this.phase_relock_obj =
+      new PhaseRelockScheduler(engine_obj, this.channels_list);
 
     for (
       let index_int = 0;
@@ -81,8 +88,26 @@ export class ChannelRack extends Emitter {
       );
       channel_obj.on('solo', () => this.#applySoloMask());
       channel_obj.on('change', () => this.emit('change', channel_obj));
+      channel_obj.on('retune', () => this.phase_relock_obj.requestRelock());
       this.channels_list.push(channel_obj);
     }
+  }
+
+  /**
+   * Relock every settled channel to the audio clock now.
+   *
+   * Brief:
+   *   The rack does this by itself shortly after any retune. It is exposed
+   *   for OfflineAudioContext tests, where no timer can drive it.
+   *
+   * Arguments:
+   *   (none)
+   *
+   * Returns:
+   *   (number): How many channels were rebuilt.
+   */
+  relockChannelPhases() {
+    return this.phase_relock_obj.relockSettledChannels();
   }
 
   /**

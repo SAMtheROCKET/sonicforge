@@ -103,8 +103,8 @@ state lives in `localStorage` on the viewer's own device.
 
 Vanilla ES2022 modules. No framework, no bundler, no runtime dependency — the
 application makes zero network requests once loaded, which is what makes the
-offline guarantee real rather than aspirational. 76 modules, each with one
-responsibility, a machine-enforced style guide, and 184 assertions across two
+offline guarantee real rather than aspirational. 77 modules, each with one
+responsibility, a machine-enforced style guide, and 190 assertions across two
 suites that render real audio through `OfflineAudioContext` and measure the
 samples rather than mocking them.
 
@@ -122,7 +122,7 @@ real-time 3D spectrogram — with no install, no account and no upload.
 - [Source and documentation](https://github.com/SAMtheROCKET/sonicforge):
   full README covering the audio architecture, the flame-acoustics bands and
   the safety notes
-- [Test suite](https://samtherocket.github.io/sonicforge/tests.html): 115
+- [Test suite](https://samtherocket.github.io/sonicforge/tests.html): 120
   assertions, run in the browser
 
 ## Safety

@@ -414,6 +414,40 @@ export function applyWaveform(oscillator_node, waveform_name_str,
   return oscillator_node;
 }
 
+/**
+ * Apply a waveform through a rotated wave table, whatever the phase.
+ *
+ * Brief:
+ *   applyWaveform hands a zero-phase wave to the browser's native type.
+ *   A phase-locked channel cannot take that shortcut. Its table angle
+ *   depends on the frame it started on, so the same channel lands on zero
+ *   one time and on another angle the next. The browser builds its native
+ *   square, saw and triangle from its own tables, which need not match
+ *   these harmonic for harmonic. Mixing the two would let a channel's
+ *   timbre shift between starts, and would leave a residue where two
+ *   opposed channels should cancel.
+ *
+ * Arguments:
+ *   oscillator_node (OscillatorNode): Node to configure.
+ *   waveform_name_str (string): Key from WAVEFORMS_DICT.
+ *   phase_degrees_float (number): Table rotation in degrees.
+ *
+ * Returns:
+ *   (OscillatorNode): The same node, for chaining.
+ *
+ * Warning:
+ *   Applying this to a running oscillator rotates its output immediately.
+ */
+export function applyRotatedWaveform(oscillator_node, waveform_name_str,
+                                     phase_degrees_float = 0) {
+  oscillator_node.setPeriodicWave(
+    getPeriodicWave(
+      oscillator_node.context, waveform_name_str, phase_degrees_float
+    )
+  );
+  return oscillator_node;
+}
+
 /* ------------------------------------------------------------------------ */
 
 /**

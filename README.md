@@ -65,7 +65,7 @@ question is being asked.
 <tr><td width="50%" valign="top">
 
 ### 16 independent channels
-Each with its own waveform, dBFS level, stereo position, **starting phase**,
+Each with its own waveform, dBFS level, stereo position, **phase**,
 detune and glide. Run all sixteen at once.
 
 ### Real phase control
@@ -73,7 +73,9 @@ detune and glide. Run all sixteen at once.
 oscillators at a chosen offset. SonicForge builds each wave from its Fourier
 coefficients and rotates every harmonic, so phase is baked into the wave table.
 Two channels 180° apart cancel to **exact silence**, and the test suite asserts
-the residual is `0.00e+0`.
+the residual is `0.00e+0`. That holds even for a channel retuned while it
+plays: phase is measured against the audio clock, and a retuned channel
+relocks to it about an eighth of a second after the last change.
 
 ### Seven noise colours
 White, pink (Voss–McCartney), brown (Brownian integration), blue, violet, grey
@@ -343,13 +345,14 @@ python server/serve.py
 # then open http://localhost:8080/tests.html
 ```
 
-**115 assertions, no framework.** Nothing is mocked: the noise tests measure the
+**120 assertions, no framework.** Nothing is mocked: the noise tests measure the
 actual spectrum of a generated buffer, and the integration tests render real
 audio through `OfflineAudioContext` and measure the samples.
 
 ```
 PeriodicWave vs native sine        max sample difference  0.00e+0
 180°-opposed sines                 residual peak          0.00e+0
+retuned while playing, then 180°   residual peak          0.00e+0
 90° phase rotation                 lag 32 samples (quarter period = 32)
 pink noise slope                   -3.05 dB/octave  (nominal -3)
 brown noise slope                  -5.57 dB/octave  (nominal -6)
@@ -364,7 +367,7 @@ Web Audio evaluating a `PeriodicWave` as `Σ real·cos + imag·sin`, and a silen
 inverted sign convention would be very hard to notice by ear. So it is asserted
 against the browser's own oscillator.
 
-There is also an application self-test — 69 checks that boot the real app,
+There is also an application self-test — 70 checks that boot the real app,
 exercise every module, and audit the rendered output for `NaN`, clipped panels
 and stale readouts:
 
@@ -405,7 +408,7 @@ One responsibility per module, `<meaning>_<dtype>` variable names, verb-first
 function names, full docstrings on every export, `UPPER_SNAKE` constants after
 the imports, ≤50 code lines per function, ≤79 characters per line.
 
-Every rule is satisfied across all 76 modules and 27,000 lines;
+Every rule is satisfied across all 77 modules and 27,000 lines;
 `lint_style.py --summary` prints the count, and CI fails the build on any
 violation.
 
