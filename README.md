@@ -169,9 +169,20 @@ and additionally runs the optional WebSocket relay for Concert Mode's LAN tier.
 
 The whole application is static.
 
-**GitHub Pages** — push to `main` and set **Settings → Pages → Source** to
-**Deploy from a branch** (`main`, `/`). An optional CI workflow that verifies
-the build first lives in `ci/`; see `ci/README.md`.
+**GitHub Pages** — push to `main`. `.github/workflows/pages.yml` verifies
+the build and then deploys it, so a push that breaks the module graph, the
+precache manifest or the style guide never reaches the live site. The
+verification is:
+
+1. no absolute asset paths — they break hosting under a `/repo-name/` subpath
+2. every file the HTML references exists
+3. every module import resolves and every DOM id exists
+4. the service-worker precache manifest is current
+5. every rule in `STYLE_GUIDE.md`
+
+All five are blocking. Run the same checks locally with
+`python tools/check_wiring.py`, `python tools/build_precache.py --check` and
+`python tools/lint_style.py`.
 
 **Vercel** — `npx vercel deploy --prod`. `vercel.json` sets the correct
 `text/javascript` MIME type for ES modules, a `no-cache` policy on `sw.js`, and
