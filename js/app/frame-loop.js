@@ -72,14 +72,24 @@ function describeEngineDot(state_str) {
 /**
  * Build the visualiser HUD line for the active mode.
  *
+ * Brief:
+ *   Exported so the sign convention below can be asserted directly. The
+ *   readout it produces sits in the same panel as the legend the canvas
+ *   draws, and the two once contradicted each other; a test that reads the
+ *   string is the only thing that keeps them agreeing.
+ *
  * Arguments:
  *   app_obj (Object): The application facade.
  *   peak_db_float (number): Current master peak, in dBFS.
  *
  * Returns:
  *   (string): HUD markup.
+ *
+ * Warning:
+ *   Returns markup, not text. Callers assign it to innerHTML, so every
+ *   value interpolated into it must be a number this module formatted.
  */
-function buildHudMarkup(app_obj, peak_db_float) {
+export function buildHudMarkup(app_obj, peak_db_float) {
   if (app_obj.ui.visualiser.mode_str === 'waterfall') {
     const audible_list = app_obj.rack.audibleChannels;
     if (!audible_list.length) {
@@ -97,9 +107,25 @@ function buildHudMarkup(app_obj, peak_db_float) {
   const beat_str = stats_obj.beat_hertz_float > 0
     ? `<span>BEAT <b>${stats_obj.beat_hertz_float.toFixed(2)} Hz</b></span>`
     : '';
+  // The legend drawn inside the canvas reports this same quantity as
+  // "destructive -99%" or "constructive +41%". The stored ratio is a
+  // *shortfall* against an incoherent sum, so it is positive when the sum
+  // is quieter -- printing it raw under the label SUM read as though a
+  // cancelling pair were at 99% of full level, the exact opposite of what
+  // the legend a few pixels above it said. Negating it makes the two agree
+  // sign for sign.
+  const sum_percent_float = -stats_obj.cancellation_ratio_float * 100;
+  let sum_sign_str = '';
+  if (sum_percent_float > 0.5) {
+    sum_sign_str = '+';
+  }
+  if (sum_percent_float < -0.5) {
+    sum_sign_str = '−';
+  }
   const sum_str = stats_obj.voice_count_int > 1
     ? '<span>SUM <b>' +
-      `${(stats_obj.cancellation_ratio_float * 100).toFixed(0)}%</b></span>`
+      `${sum_sign_str}${Math.abs(sum_percent_float).toFixed(0)}%` +
+      '</b></span>'
     : '';
   return `<span>VOICES <b>${stats_obj.voice_count_int}</b></span>` +
     beat_str + sum_str;

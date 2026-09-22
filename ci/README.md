@@ -7,7 +7,7 @@ and then deploys to GitHub Pages:
 2. every file referenced by the HTML exists
 3. every module import resolves and every DOM id exists
 4. the service-worker precache manifest is current
-5. style-guide summary (non-blocking)
+5. every style rule in STYLE_GUIDE.md
 
 The site does **not** need this. SonicForge is fully static, so Pages can
 serve the repository root directly — which is how it is deployed today.

@@ -8,6 +8,7 @@
  *   as NaN.
  */
 
+import { buildHudMarkup } from '../app/frame-loop.js';
 import { restoreSession } from '../app/session.js';
 import {
   CHECKS_LIST,
@@ -142,6 +143,58 @@ function runReadoutChecks(app) {
 
 
 /**
+ * The HUD sum readout agrees in sign with the canvas legend.
+ *
+ * Brief:
+ *   The stored ratio is a shortfall, so it is positive when the sum is
+ *   *quieter*. Printed raw under the label SUM, a pair cancelling to
+ *   silence read "SUM 99%" while the legend a few pixels above it read
+ *   "destructive -99%". Both numbers were correct; only one of them was
+ *   readable. These assertions pin the direction.
+ *
+ * Arguments:
+ *   (none)
+ *
+ * Returns:
+ *   (none)
+ */
+function runHudSignChecks() {
+  const buildStubApp = (cancellation_ratio_float) => ({
+    ui: {
+      visualiser: { mode_str: 'interference' },
+      interference: {
+        stats_obj: {
+          voice_count_int: 2,
+          beat_hertz_float: 0,
+          cancellation_ratio_float,
+        },
+      },
+    },
+  });
+
+  check('a cancelling pair reports the sum as down, not up', () => {
+    const markup_str = buildHudMarkup(buildStubApp(0.99), -20);
+
+    return verdict(markup_str.includes('−99%'), markup_str);
+  });
+
+  check('a reinforcing pair reports the sum as up', () => {
+    const markup_str = buildHudMarkup(buildStubApp(-0.41), -6);
+
+    return verdict(markup_str.includes('+41%'), markup_str);
+  });
+
+  check('a single voice reports no sum at all', () => {
+    const app_stub_obj = buildStubApp(0);
+    app_stub_obj.ui.interference.stats_obj.voice_count_int = 1;
+    const markup_str = buildHudMarkup(app_stub_obj, -12);
+
+    return verdict(!markup_str.includes('SUM'), markup_str);
+  });
+}
+
+
+/**
  * Run this group of checks.
  *
  * Brief:
@@ -158,4 +211,5 @@ function runReadoutChecks(app) {
 export function runOutputChecks(app) {
   runTextSanityChecks(app);
   runReadoutChecks(app);
+  runHudSignChecks();
 }
