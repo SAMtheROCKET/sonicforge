@@ -96,18 +96,34 @@ def compute_content_hash(root_obj, relative_paths_list):
         Paths are included alongside contents so that renaming a file
         changes the version even when its bytes do not.
 
+        Line endings are normalised to LF before hashing. Every precached
+        file is text, and the host serves the repository's own LF bytes, so
+        LF content is what the browser actually caches -- a checkout that
+        materialised CRLF locally would otherwise produce a version string
+        describing bytes nobody is ever served. .gitattributes asks Git for
+        the same normalisation, but that only governs files as they are
+        checked out: anything already in a working copy keeps whatever
+        endings it had, which is exactly how this drifted far enough to
+        fail CI while passing locally.
+
     Arguments:
         root_obj (Path): Repository root.
         relative_paths_list (list[str]): Files to hash, in order.
 
     Returns:
         (str): A short hexadecimal version string.
+
+    Warning:
+        Assumes every precached file is text. That holds for
+        PRECACHE_GLOBS_TUPLE as written; adding a binary glob to it would
+        need this normalisation made conditional on the extension.
     """
     digest_obj = hashlib.sha256()
 
     for relative_path_str in relative_paths_list:
+        content_bytes = (root_obj / relative_path_str).read_bytes()
         digest_obj.update(relative_path_str.encode("utf-8"))
-        digest_obj.update((root_obj / relative_path_str).read_bytes())
+        digest_obj.update(content_bytes.replace(b"\r\n", b"\n"))
 
     return digest_obj.hexdigest()[:HASH_LENGTH_INT]
 
