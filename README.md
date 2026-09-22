@@ -112,16 +112,33 @@ sample rate, **48 kHz** if you switch the context to 96 kHz.
 <img src="assets/interference.gif" alt="The interference field showing a 4 Hz beat" width="640">
 </div>
 
-Above: 440 Hz against 444 Hz. The **cyan** trace is the left channel sum, the
+Above: 60 Hz against 64 Hz. The **cyan** trace is the left channel sum, the
 **violet** trace the right, and the red dots mark where the superposition
 collapses. The readout names the beat — `4.00 Hz` — because it derives it from
-the channel parameters rather than guessing from an analyser.
+the channel parameters rather than guessing from an analyser. The carriers are
+low here only so that individual cycles stay legible at this size; 440 Hz
+against 444 Hz gives the same 4 Hz beat.
 
 This matters more than it looks. An FFT can tell you the result is quiet. It
 cannot tell you *why*. The interference view computes the superposition
 analytically from each channel's own frequency, phase, level and pan, so you can
 watch two tones annihilate while their individual contributions keep swinging at
 full amplitude underneath.
+
+### Phase is a control, not a label
+
+<div align="center">
+<img src="assets/phase-null.gif" alt="Two 60 Hz tones swept from reinforcement into cancellation" width="640">
+</div>
+
+Two 60 Hz sines, identical but for phase, with one swept from 0° to 180° and
+back. The verdict tracks the sum the whole way: `constructive +41%` where they
+reinforce, `destructive −99%` at the null. The pale traces underneath are the
+individual channels, still at full amplitude while their sum disappears.
+
+That sweep is not available in a browser by default. `OscillatorNode` has no
+phase parameter, so SonicForge builds each waveform from its Fourier
+coefficients and rotates every harmonic, baking the offset into the wave table.
 
 ---
 

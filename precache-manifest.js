@@ -12,7 +12,7 @@
  */
 
 self.__SONICFORGE_PRECACHE = {
-  version: '6e778a044e89',
+  version: 'e107a8d33544',
   files: [
     './assets/icon.svg',
     './assets/logo-mark.svg',
