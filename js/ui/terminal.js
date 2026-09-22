@@ -202,7 +202,7 @@ export class Terminal {
    */
   showBanner() {
     this.appendLogLine(
-      'SonicForge script terminal — type help() for the command list.', 'dim'
+      'SonicForge script terminal - type help() for the command list.', 'dim'
     );
     this.appendLogLine(
       'play(440hz, 1s, sine)      loop(4, [ play(880,100), wait(150) ])', 'dim'
@@ -590,7 +590,7 @@ export class Terminal {
       next_el.rows = MULTILINE_ROW_COUNT_INT;
       next_el.style.resize = 'vertical';
       next_el.style.padding = '8px 0';
-      next_el.placeholder = 'Multi-line script — Ctrl+Enter to run';
+      next_el.placeholder = 'Multi-line script - Ctrl+Enter to run';
       prompt_el.style.height = 'auto';
       prompt_el.style.alignItems = 'flex-start';
       prompt_el.style.paddingTop = '8px';
@@ -654,7 +654,7 @@ export class Terminal {
     vm_obj.on('start', ({ label, count }) => {
       const plural_str = count === 1 ? '' : 's';
       this.appendLogLine(
-        `▸ running ${label} — ${count} command${plural_str}`, 'ok'
+        `▸ running ${label} - ${count} command${plural_str}`, 'ok'
       );
       this.tracker_el.hidden = false;
     });
@@ -691,7 +691,7 @@ export class Terminal {
   #renderTracker(snapshot_obj) {
     if (!snapshot_obj.current_obj) {
       this.program_counter_el.textContent =
-        snapshot_obj.state_str === VM_STATE.DRAINING ? 'draining' : '—';
+        snapshot_obj.state_str === VM_STATE.DRAINING ? 'draining' : '-';
       this.progress_bar_el.style.width = '0%';
       this.countdown_el.textContent = '';
       return;

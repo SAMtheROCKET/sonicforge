@@ -74,7 +74,7 @@ export function panic(app_obj) {
   }, PANIC_RECOVER_MS_INT);
 
   app_obj.ui.header?.sync();
-  showToast('Panic — everything silenced.', 'warn', 2200);
+  showToast('Panic - everything silenced.', 'warn', 2200);
   app_obj.log('PANIC: all sources stopped.', 'warn');
 }
 
@@ -92,7 +92,7 @@ function updateNyquistBadge(app_obj) {
   const nyquist_hertz_float = app_obj.engine.nyquistHertz;
 
   badge_el.textContent = `${(nyquist_hertz_float / 1000).toFixed(1)} kHz`;
-  badge_el.title = 'Nyquist limit — the highest frequency this context ' +
+  badge_el.title = 'Nyquist limit - the highest frequency this context ' +
     `can represent is ${nyquist_hertz_float.toFixed(0)} Hz`;
   badge_el.className = `badge ${
     nyquist_hertz_float > HIGH_NYQUIST_HERTZ_FLOAT ? 'badge--violet' : ''
@@ -159,7 +159,7 @@ function bindMasterLevel(app_obj) {
     app_obj.engine.isLimiterEnabled = change_event.target.checked;
     if (!change_event.target.checked) {
       showToast(
-        'Limiter bypassed — the output path is now provably linear, and ' +
+        'Limiter bypassed - the output path is now provably linear, and ' +
         'clipping is possible.',
         'warn',
         6000
@@ -223,7 +223,7 @@ function bindConcertPitch(app_obj) {
   select_el.innerHTML = PITCH_STANDARDS_LIST
     .map((standard_obj) =>
       `<option value="${standard_obj.hertz_float}">` +
-      `${standard_obj.label_str} Hz — ${standard_obj.note_str}</option>`)
+      `${standard_obj.label_str} Hz - ${standard_obj.note_str}</option>`)
     .join('') + '<option value="custom">Custom…</option>';
   select_el.value = '440';
 
@@ -282,7 +282,7 @@ function describeRateChange(wanted_rate_int) {
   const ceiling_str = (wanted_rate_int / 2000).toFixed(1);
   const caveat_str = wanted_rate_int >= ULTRASONIC_RATE_HERTZ_INT
     ? '<br><br>Note that most speakers produce nothing above ~22 kHz ' +
-      'regardless of sample rate — ultrasonic output needs a piezo tweeter.'
+      'regardless of sample rate - ultrasonic output needs a piezo tweeter.'
     : '';
 
   return 'An AudioContext’s sample rate is fixed once it is created, so ' +

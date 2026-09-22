@@ -107,7 +107,7 @@ function createFacadeOperations() {
         this.vm.run(source_str, options_obj);
       } catch (err) {
         this.log(err.format ? err.format() : err.message, 'err');
-        showToast('Script error — see the terminal.', 'err');
+        showToast('Script error - see the terminal.', 'err');
       }
     },
 

@@ -1,4 +1,4 @@
-# SonicForge — Code Style Guide
+# SonicForge - Code Style Guide
 
 Every rule here is enforced mechanically by `tools/lint_style.py`. If the
 linter passes, the code complies. If a rule cannot be enforced automatically,
@@ -6,9 +6,9 @@ it is marked **(review)** and is checked at review time instead.
 
 > **Platform note.** SonicForge is a browser application: the audio engine is
 > the Web Audio API and the visualiser is WebGL. Neither exists in Python, so
-> the code is ES2022 modules. Every structural rule below — one concern per
+> the code is ES2022 modules. Every structural rule below - one concern per
 > module, a thin entry point, size limits, docstrings, typed signatures,
-> descriptive names — is applied to those modules exactly as it would be to
+> descriptive names - is applied to those modules exactly as it would be to
 > Python packages.
 
 ---
@@ -31,7 +31,7 @@ it is marked **(review)** and is checked at review time instead.
 
 Module order is fixed:
 
-1. Module docstring (`/** … */`) — what this module owns and why it exists.
+1. Module docstring (`/** … */`) - what this module owns and why it exists.
 2. Imports, grouped: standard → internal utilities → internal domain.
 3. **Constants, in `UPPER_SNAKE_CASE`**, immediately after the imports.
 4. Types / shape documentation.
@@ -42,7 +42,7 @@ Module order is fixed:
 
 ## 2. Naming
 
-### 2.1 Variables — `<meaning>_<dtype>`
+### 2.1 Variables - `<meaning>_<dtype>`
 
 Every variable carries its physical meaning **and** its data type.
 The meaning comes first because that is what the reader is looking for.
@@ -75,7 +75,7 @@ Physical-unit prefixes are required wherever a quantity has units:
 **Single-character identifiers are forbidden**, with one exception: the
 conventional loop index in a numeric `for` loop may be `index_int`, never `i`.
 
-### 2.2 Functions — verb-first, typed
+### 2.2 Functions - verb-first, typed
 
 A function name states the **operation**, not the noun:
 
@@ -87,11 +87,11 @@ is_frequency_within_nyquist()            not  check()
 
 Boolean-returning functions begin `is_`, `has_`, `can_`, or `should_`.
 
-### 2.3 Classes — `PascalCase` nouns naming the thing they model
+### 2.3 Classes - `PascalCase` nouns naming the thing they model
 
 `AudioEngine`, `ToneChannel`, `NoiseGenerator`, `RoomCalibrator`.
 
-### 2.4 Constants — `UPPER_SNAKE_CASE`, declared after imports
+### 2.4 Constants - `UPPER_SNAKE_CASE`, declared after imports
 
 ```js
 const DEFAULT_SAMPLE_RATE_HERTZ_INT = 48000;
@@ -128,11 +128,11 @@ docstring with these sections, in this order:
 
 Required sections:
 
-- **Title** — one line, imperative, comprehensive.
-- **Brief** — why this exists, not what the code obviously does.
-- **Arguments** — name, type, meaning. `(none)` if there are none.
-- **Returns** — type and meaning. `(none)` if it returns nothing.
-- **Warning** — failure modes, side effects, precision limits, ordering
+- **Title** - one line, imperative, comprehensive.
+- **Brief** - why this exists, not what the code obviously does.
+- **Arguments** - name, type, meaning. `(none)` if there are none.
+- **Returns** - type and meaning. `(none)` if it returns nothing.
+- **Warning** - failure modes, side effects, precision limits, ordering
   requirements. Omit the section only when there is genuinely nothing to warn
   about.
 
@@ -150,7 +150,7 @@ Required sections:
 ### 4.1 Where the column limit does not apply
 
 The limit governs **code**. In three places a line break is not neutral
-formatting — it changes the thing itself — and the limit is therefore
+formatting - it changes the thing itself - and the limit is therefore
 suspended. Each is a deliberate exemption, not an oversight.
 
 **Multi-line template literals.** A template literal spanning several lines
@@ -168,8 +168,8 @@ declaration, and it carries a comment saying so.
 **HTML metadata, and one inline break.** A `<meta>` description or an Open
 Graph string is content: rewrapping it changes what search engines and link
 unfurlers read. The favicon is a data URI, unbreakable for the same reason as
-the CSS one. And exactly one line — the status bar's dot immediately followed
-by its label — cannot break, because there is no space between those two
+the CSS one. And exactly one line - the status bar's dot immediately followed
+by its label - cannot break, because there is no space between those two
 inline elements and a newline would render as one.
 
 Everything else in the markup **is** wrapped: attributes one per line, SVG
@@ -185,7 +185,7 @@ asserted.
 That was settled empirically rather than by argument. A probe boots the page,
 records the bounding box of all 111 elements carrying an id plus the total
 element count, and diffs it against the same page before the change. Wrapping
-is correct only when that comparison is identical — and it caught the status
+is correct only when that comparison is identical - and it caught the status
 bar shifting six pixels, which is why that one line still carries a comment
 saying it must stay long. Screenshots cannot do this job: the meters and the
 frame counter differ between runs of the same file.
@@ -214,7 +214,7 @@ the dtype suffix, subject to the length budget.
 import resolves to a real export, that every element id referenced in
 code exists in `index.html`, and that every style token used is defined.
 It reads the inline module scripts in `index.html` and `tests.html` as
-well as the `.js` files — an export moved between modules once broke the
+well as the `.js` files - an export moved between modules once broke the
 unit suite silently, because a page that fails to load reports nothing.
 
 **(review)** items not machine-checkable: whether a name is genuinely

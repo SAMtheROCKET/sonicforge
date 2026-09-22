@@ -1,5 +1,5 @@
 {
-  "name": "SonicForge — Precision Tone Generator & Noise Lab",
+  "name": "SonicForge - Precision Tone Generator & Noise Lab",
   "short_name": "SonicForge",
   "description": "16-channel tone generator, seven-colour noise lab, speaker water-eject, microphone room calibration and a real-time 3D spectrogram. Entirely client-side.",
   "start_url": "./",

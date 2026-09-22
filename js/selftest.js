@@ -72,7 +72,7 @@ async function postReport(report_obj) {
  *
  * Arguments:
  *   app_obj (Object): The application facade.
- *   options_obj (Object): { boot } — the boot function to call.
+ *   options_obj (Object): { boot } - the boot function to call.
  *
  * Returns:
  *   (Promise<Object>): The report.

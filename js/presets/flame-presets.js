@@ -13,7 +13,7 @@
 export const PRESETS_LIST = [
   /* ================= FLAME & INFRASOUND ===============================
      Flames respond to acoustic VELOCITY, not pressure. In a tube, place the
-     flame at a velocity antinode — which is a pressure NODE, where the flames
+     flame at a velocity antinode - which is a pressure NODE, where the flames
      sit lowest, not highest. Getting this backwards is the single most common
      reason people report "no effect".
      ==================================================================== */
@@ -21,7 +21,7 @@ export const PRESETS_LIST = [
     id: 'candle-flicker-lock',
     group: 'flame',
     name: 'Candle Flicker Lock',
-    desc: 'AM sweep 8–16 Hz — phase-locks a candle’s natural flicker',
+    desc: 'AM sweep 8-16 Hz - phase-locks a candle’s natural flicker',
     icon: 'bolt',
     tone: 'warn',
     safety: {
@@ -36,7 +36,7 @@ export const PRESETS_LIST = [
         'protection or leave the room ' +
         'and let the camera record.<br><br>' +
         'Master output will be capped at −8 dBFS.',
-      confirm: 'I understand — run it',
+      confirm: 'I understand - run it',
       capDb: -8,
     },
     script: `
@@ -64,16 +64,16 @@ export const PRESETS_LIST = [
     id: 'flame-extinction',
     group: 'flame',
     name: 'Flame Extinction Sweep',
-    desc: '30–60 Hz — the band that strips a small flame out',
+    desc: '30-60 Hz - the band that strips a small flame out',
     icon: 'droplet',
     tone: 'warn',
     safety: {
       title: 'Loud low frequencies near an open flame',
       body:
         'Extinguishing a flame acoustically needs real sound ' +
-        'pressure at 30–60 Hz. ' +
+        'pressure at 30-60 Hz. ' +
         'This will be <b>physically uncomfortable</b> and needs a ' +
-        'subwoofer or a large driver — ' +
+        'subwoofer or a large driver - ' +
         'a laptop speaker produces nothing useful in this band.<br><br>' +
         '• <b>Headphones off.</b> At this level in-ear playback ' +
         'is dangerous.<br>' +
@@ -103,11 +103,11 @@ export const PRESETS_LIST = [
     id: 'rubens-tube',
     group: 'flame',
     name: 'Rubens Tube Stepper',
-    desc: 'Stepped 60–240 Hz — walks standing-wave nodes along the tube',
+    desc: 'Stepped 60-240 Hz - walks standing-wave nodes along the tube',
     icon: 'ruler',
     tone: 'warn',
     safety: {
-      title: 'Rubens tube — gas and flame',
+      title: 'Rubens tube - gas and flame',
       body:
         'A Rubens tube is a perforated pipe full of flammable ' +
         'gas with a row ' +
@@ -117,7 +117,7 @@ export const PRESETS_LIST = [
         '• Ventilate the space.<br>' +
         '• Keep the gas supply reachable and have extinguishing ' +
         'means at hand.<br><br>' +
-        'SonicForge only produces the tone — everything else is your ' +
+        'SonicForge only produces the tone - everything else is your ' +
         'rig’s responsibility.',
       confirm: 'My rig is ready',
       capDb: -8,
@@ -149,7 +149,7 @@ export const PRESETS_LIST = [
     id: 'premixed-wrinkle',
     group: 'flame',
     name: 'Premixed Front Wrinkle',
-    desc: '100–600 Hz sweep — corrugates a butane burner’s flame front',
+    desc: '100-600 Hz sweep - corrugates a butane burner’s flame front',
     icon: 'activity',
     tone: 'warn',
     safety: {
@@ -203,8 +203,8 @@ export const PRESETS_LIST = [
   {
     id: 'infrasound-direct',
     group: 'flame',
-    name: 'Direct Infrasound 1–20 Hz',
-    desc: 'True sub-audible sweep — needs a real subwoofer',
+    name: 'Direct Infrasound 1-20 Hz',
+    desc: 'True sub-audible sweep - needs a real subwoofer',
     icon: 'activity',
     tone: 'violet',
     async apply(app) {
@@ -214,7 +214,7 @@ export const PRESETS_LIST = [
         'reproduce this. ' +
         'A laptop driver rolls off below ~400 Hz; a bookshelf ' +
         'speaker below ~50 Hz. ' +
-        'If nothing moves, that is the transducer, not the signal — use ' +
+        'If nothing moves, that is the transducer, not the signal - use ' +
         'Candle Flicker Lock instead.',
         'warn'
       );
@@ -238,8 +238,8 @@ export const PRESETS_LIST = [
   {
     id: 'ultrasonic-sweep',
     group: 'flame',
-    name: 'Ultrasonic 20–48 kHz',
-    desc: 'Above hearing — requires a 96 kHz context',
+    name: 'Ultrasonic 20-48 kHz',
+    desc: 'Above hearing - requires a 96 kHz context',
     icon: 'bolt',
     tone: 'violet',
     async apply(app) {
@@ -261,7 +261,7 @@ export const PRESETS_LIST = [
         Math.min(nyquist_hertz_float - 1000, 48000);
       app.log(
         `Sweeping 20 kHz → ${(top_hertz_float / 1000).toFixed(0)} kHz. ` +
-        'Most speakers produce nothing above ~22 kHz — ' +
+        'Most speakers produce nothing above ~22 kHz - ' +
         'a piezo tweeter is required for real ultrasonic output.',
         'warn'
       );

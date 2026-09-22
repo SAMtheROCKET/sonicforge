@@ -48,7 +48,7 @@ const ADDED_TONE_GAIN_DB_FLOAT = -18;
 /** Copy explaining why an inaudible band may produce no sound. */
 const INFRASONIC_HINT_STR =
   'Below the hearing threshold. Most speakers cannot reproduce this at ' +
-  'all — use am() to deliver the envelope on an audible carrier.';
+  'all - use am() to deliver the envelope on an audible carrier.';
 const ULTRASONIC_HINT_STR =
   'Above the hearing threshold. Needs a piezo tweeter; ordinary drivers ' +
   'roll off by ~22 kHz.';

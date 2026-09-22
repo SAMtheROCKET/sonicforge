@@ -16,7 +16,7 @@ export const PRESETS_LIST = [
     id: 'deep-focus',
     group: 'focus',
     name: 'Deep Focus',
-    desc: 'Brown–pink hybrid, weighted under the voice band',
+    desc: 'Brown-pink hybrid, weighted under the voice band',
     icon: 'shield',
     tone: 'violet',
     async apply(app) {
@@ -43,7 +43,7 @@ export const PRESETS_LIST = [
     group: 'focus',
     name: 'Conversation Shield',
     desc: 'Masking energy concentrated across ' +
-      `${VOCAL_BAND_HERTZ_DICT.lower_hertz_float}–` +
+      `${VOCAL_BAND_HERTZ_DICT.lower_hertz_float}-` +
       `${VOCAL_BAND_HERTZ_DICT.upper_hertz_float} Hz`,
     icon: 'users',
     tone: 'violet',
@@ -53,7 +53,7 @@ export const PRESETS_LIST = [
       await noise_obj.setColour('pink', 'primary');
       await noise_obj.setColour('brown', 'secondary');
       await noise_obj.setBlendRatio(0.42);
-      // Speech intelligibility lives in the 300–3400 Hz band; raising the
+      // Speech intelligibility lives in the 300-3400 Hz band; raising the
       // masker there beats simply turning everything up, which just makes
       // the room louder without improving the masking ratio.
       noise_obj.setShapeFilter({ type: 'off' });
@@ -62,7 +62,7 @@ export const PRESETS_LIST = [
       await noise_obj.start();
       app.log(
         'Conversation Shield: +9 dB emphasis centred on ' +
-        `${VOCAL_BAND_HERTZ_DICT.centre_hertz_float} Hz — ` +
+        `${VOCAL_BAND_HERTZ_DICT.centre_hertz_float} Hz - ` +
         'masks speech, not the whole room.',
         'ok'
       );

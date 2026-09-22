@@ -207,7 +207,7 @@ export async function bootApplication(app_obj) {
   startFrameLoop(app_obj);
 
   app_obj.log(
-    `Engine ready — ${app_obj.engine.sampleRateHertz} Hz, ` +
+    `Engine ready - ${app_obj.engine.sampleRateHertz} Hz, ` +
     `${app_obj.engine.latencyMs.toFixed(1)} ms latency.`,
     'ok'
   );

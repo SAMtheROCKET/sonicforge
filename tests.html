@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SonicForge — Test Suite</title>
+<title>SonicForge - Test Suite</title>
 <link rel="stylesheet" href="./css/theme.css">
 <link rel="stylesheet" href="./css/components.css">
 <style>
@@ -108,7 +108,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Sonic<em>Forge</em> — Test Suite</h1>
+  <h1>Sonic<em>Forge</em> - Test Suite</h1>
   <p class="hint" style="margin-top:6px">
     Pure-DSP assertions plus real audio rendered through
     <code>OfflineAudioContext</code>.
@@ -146,7 +146,7 @@ function test(name, fn) {
 class AssertionError extends Error {}
 
 function ok(value, msg = 'expected truthy') {
-  if (!value) throw new AssertionError(`${msg} — got ${fmt(value)}`);
+  if (!value) throw new AssertionError(`${msg} - got ${fmt(value)}`);
 }
 
 function eq(actual, expected, msg = 'values differ') {
@@ -158,7 +158,7 @@ function eq(actual, expected, msg = 'values differ') {
 
 function close(actual, expected, tol, msg = 'outside tolerance') {
   if (!Number.isFinite(actual)) {
-    throw new AssertionError(`${msg} — actual is ${fmt(actual)}`);
+    throw new AssertionError(`${msg} - actual is ${fmt(actual)}`);
   }
   const d = Math.abs(actual - expected);
   if (d > tol) {
@@ -276,7 +276,7 @@ function measureSlope(buf, rate, loHz = 250, hiHz = 4000) {
   }
   if (points.length < 2) return NaN;
 
-  // Least-squares fit of dB against log2(f) — the slope is dB per octave.
+  // Least-squares fit of dB against log2(f) - the slope is dB per octave.
   const n = points.length;
   const sx = points.reduce((s, p) => s + p[0], 0);
   const sy = points.reduce((s, p) => s + p[1], 0);
@@ -316,7 +316,7 @@ function maxDiff(a, b, from = 0, to = a.length) {
 }
 
 /* =========================================================================
-   SUITE — util/math
+   SUITE - util/math
    ========================================================================= */
 
 suite('util/math', () => {
@@ -402,7 +402,7 @@ suite('util/math', () => {
 });
 
 /* =========================================================================
-   SUITE — dsp/fft
+   SUITE - dsp/fft
    ========================================================================= */
 
 suite('dsp/fft', () => {
@@ -528,7 +528,7 @@ suite('dsp/fft', () => {
 });
 
 /* =========================================================================
-   SUITE — dsp/weighting
+   SUITE - dsp/weighting
    ========================================================================= */
 
 suite('dsp/weighting', () => {
@@ -622,7 +622,7 @@ suite('dsp/weighting', () => {
 });
 
 /* =========================================================================
-   SUITE — dsp/noise-shapes
+   SUITE - dsp/noise-shapes
    ========================================================================= */
 
 suite('dsp/noise-shapes', () => {
@@ -635,7 +635,7 @@ suite('dsp/noise-shapes', () => {
     close(slope, 0, 1.2, 'white noise slope');
   });
 
-  test('pink noise (Voss–McCartney) is −3 dB/octave', () => {
+  test('pink noise (Voss-McCartney) is −3 dB/octave', () => {
     const buf = buildNoiseBuffer('pink', LEN, RATE, { seed_int: 2 });
     const slope = measureSlope(buf, RATE);
     note(`measured ${slope.toFixed(2)} dB/oct`);
@@ -670,8 +670,8 @@ suite('dsp/noise-shapes', () => {
     const low = measureBandPowerDb(freqs, mags, 80, 160);
     const mid = measureBandPowerDb(freqs, mags, 700, 1400);
     const high = measureBandPowerDb(freqs, mags, 7000, 12000);
-    note(`80–160 Hz ${low.toFixed(1)} dB · 1 kHz ` +
-      `${mid.toFixed(1)} dB · 7–12 kHz ${high.toFixed(1)} dB`);
+    note(`80-160 Hz ${low.toFixed(1)} dB · 1 kHz ` +
+      `${mid.toFixed(1)} dB · 7-12 kHz ${high.toFixed(1)} dB`);
     ok(
       low > mid + 5,
       'grey must carry far more low-frequency energy than mid'
@@ -686,8 +686,8 @@ suite('dsp/noise-shapes', () => {
     const centre = measureBandPowerDb(freqs, mags, 350, 700);
     const low = measureBandPowerDb(freqs, mags, 40, 80);
     const high = measureBandPowerDb(freqs, mags, 6000, 12000);
-    note(`40–80 Hz ${low.toFixed(1)} · 350–700 Hz ` +
-      `${centre.toFixed(1)} · 6–12 kHz ${high.toFixed(1)}`);
+    note(`40-80 Hz ${low.toFixed(1)} · 350-700 Hz ` +
+      `${centre.toFixed(1)} · 6-12 kHz ${high.toFixed(1)}`);
     ok(centre > high + 6, 'the mid bell must dominate the top end');
     ok(centre > low, 'the mid bell must dominate the very bottom');
   });
@@ -878,7 +878,7 @@ suite('core/tuning', () => {
 });
 
 /* =========================================================================
-   SUITE — core/waveforms
+   SUITE - core/waveforms
    ========================================================================= */
 
 suite('core/waveforms', () => {
@@ -1003,7 +1003,7 @@ suite('core/waveforms', () => {
 });
 
 /* =========================================================================
-   SUITE — Web Audio integration (OfflineAudioContext)
+   SUITE - Web Audio integration (OfflineAudioContext)
 
    These render real audio. The first test pins down the PeriodicWave sign
    convention that the whole phase-offset feature depends on.
@@ -1213,7 +1213,7 @@ suite('web audio integration', () => {
 });
 
 /* =========================================================================
-   SUITE — core/phase-lock
+   SUITE - core/phase-lock
 
    Phase is defined against the audio clock, so it must survive a channel
    being retuned while it plays. These drive a real ChannelRack through an
@@ -1335,7 +1335,7 @@ suite('core/phase-lock', () => {
 });
 
 /* =========================================================================
-   SUITE — script/lexer
+   SUITE - script/lexer
    ========================================================================= */
 
 suite('script/lexer', () => {
@@ -1425,7 +1425,7 @@ suite('script/lexer', () => {
 });
 
 /* =========================================================================
-   SUITE — script/parser
+   SUITE - script/parser
    ========================================================================= */
 
 suite('script/parser', () => {
@@ -1549,7 +1549,7 @@ suite('script/parser', () => {
 });
 
 /* =========================================================================
-   SUITE — script/commands
+   SUITE - script/commands
    ========================================================================= */
 
 suite('script/commands', () => {
@@ -1582,14 +1582,14 @@ suite('script/commands', () => {
         parse(ex);
       } catch (err) {
         throw new AssertionError(`${name}: its own example fails to ` +
-          `parse — ${ex}\n  ${err.message}`);
+          `parse - ${ex}\n  ${err.message}`);
       }
     }
   });
 });
 
 /* =========================================================================
-   SUITE — util/qr
+   SUITE - util/qr
    ========================================================================= */
 
 suite('util/qr', () => {
@@ -1670,14 +1670,14 @@ suite('util/qr', () => {
   test('BarcodeDetector decodes our output (if available)', async () => {
     if (!('BarcodeDetector' in window)) {
       note(
-        'BarcodeDetector unavailable in this browser — ' +
+        'BarcodeDetector unavailable in this browser - ' +
         'structural checks only'
       );
       return;
     }
     const supported = await BarcodeDetector.getSupportedFormats();
     if (!supported.includes('qr_code')) {
-      note('qr_code format not supported here — structural checks only');
+      note('qr_code format not supported here - structural checks only');
       return;
     }
 
@@ -1710,7 +1710,7 @@ suite('util/qr', () => {
 });
 
 /* =========================================================================
-   SUITE — sync/transport
+   SUITE - sync/transport
    ========================================================================= */
 
 suite('sync/transport', () => {
@@ -1763,14 +1763,14 @@ suite('sync/transport', () => {
 });
 
 /* =========================================================================
-   SUITE — sync/concert
+   SUITE - sync/concert
    ========================================================================= */
 
 suite('sync/concert', () => {
   // The node's phase offset is the whole point of Concert Mode: two devices
   // at 0° and 180° is the cancellation experiment. It reaches the channels
   // only if it is written under the key the deserialiser reads, and writing
-  // it under any other name fails silently — the tones still play.
+  // it under any other name fails silently - the tones still play.
   test('a node phase offset lands on the key the rack reads', () => {
     const folded = foldPhaseIntoChannels([{ phase_degrees_int: 0 }], 180);
     ok('phase_degrees_int' in folded[0],
@@ -1920,7 +1920,7 @@ async function run() {
   const verdict_str = fail
     ? `✗ ${fail} FAIL`
     : `✓ ${pass} pass`;
-  document.title = `${verdict_str} — SonicForge Tests`;
+  document.title = `${verdict_str} - SonicForge Tests`;
   console.log(`[SonicForge tests] ${pass} passed, ` +
     `${fail} failed in ${ms.toFixed(0)}ms`);
 

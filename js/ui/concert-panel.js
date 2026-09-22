@@ -263,7 +263,7 @@ export class ConcertPanel {
         el.signal_input_el.value = offer_code_str;
         el.signal_input_el.select();
         showToast(
-          'Offer created — send this code to the other device.',
+          'Offer created - send this code to the other device.',
           'ok',
           OFFER_TOAST_MS_INT
         );
@@ -307,14 +307,14 @@ export class ConcertPanel {
       const transport_obj = this.concert_obj.transport_obj;
       if (transport_obj.pairing_role_str === 'offerer') {
         await transport_obj.acceptAnswer(code_str);
-        showToast('Answer accepted — connecting…', 'ok');
+        showToast('Answer accepted - connecting…', 'ok');
         return;
       }
       const reply_code_str = await transport_obj.acceptOffer(code_str);
       el.signal_input_el.value = reply_code_str;
       el.signal_input_el.select();
       showToast(
-        'Reply code generated — send it back to the host.',
+        'Reply code generated - send it back to the host.',
         'ok',
         LONG_TOAST_MS_INT
       );
@@ -511,7 +511,7 @@ export class ConcertPanel {
 
     if (is_master_bool) {
       el.offset_el.textContent = 'reference';
-      el.rtt_el.textContent = '—';
+      el.rtt_el.textContent = '-';
     }
     el.sync_tone_button_el.disabled = !is_master_bool;
     el.push_button_el.disabled = !is_master_bool;

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   SonicForge — Design tokens, reset, and application shell
+   SonicForge - Design tokens, reset, and application shell
    Deep onyx substrate · neon cyan actives
    · violet script accents · glassmorphism
    ========================================================================= */
@@ -331,7 +331,7 @@ canvas {
   min-height: 0;
 }
 
-/* Specular top edge — the tell that sells frosted glass. */
+/* Specular top edge - the tell that sells frosted glass. */
 .panel::after {
   content: "";
   position: absolute;
@@ -348,7 +348,7 @@ canvas {
 /*
  * Panels inside a scrolling rail must keep their natural height. Without this
  * they inherit flex-shrink:1, compress to fit the rail, and silently clip
- * their own copy — the calibration note loses its last line and nothing
+ * their own copy - the calibration note loses its last line and nothing
  * indicates it is missing.
  */
 .rail > .panel,

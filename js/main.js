@@ -1,5 +1,5 @@
 /**
- * SonicForge — application entry point.
+ * SonicForge - application entry point.
  *
  * Brief:
  *   Nothing here contains audio logic, and nothing here builds an interface.
@@ -74,6 +74,6 @@ startSelfTestIfRequested();
 // by a cache-first worker.
 registerServiceWorker(() => {
   showToast(
-    'A new version of SonicForge is ready — reload to update.', 'ok', 0
+    'A new version of SonicForge is ready - reload to update.', 'ok', 0
   );
 });

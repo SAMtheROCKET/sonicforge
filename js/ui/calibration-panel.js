@@ -59,7 +59,7 @@ const MONO_FONT_STACK_STR = '"JetBrains Mono", ui-monospace, monospace';
 const MEASUREMENT_CONSENT_HTML_STR =
   'SonicForge will play a 3-second sweep through your <b>speakers</b> and ' +
   'listen back with the <b>microphone</b>, then build a correction curve.' +
-  '<br><br><b>Take your headphones off</b> — measuring headphones through ' +
+  '<br><br><b>Take your headphones off</b> - measuring headphones through ' +
   'a laptop mic tells you nothing. Keep the room quiet and stay still.' +
   '<br><br><span class="text-cyan">The recording never leaves this ' +
   'device.</span> Nothing is stored, nothing is uploaded, and the ' +
@@ -273,7 +273,7 @@ export class CalibrationPanel {
 
     if (result_obj.confidence_float < LOW_CONFIDENCE_FLOAT) {
       showToast(
-        'Low confidence — check that the speakers are audible and the ' +
+        'Low confidence - check that the speakers are audible and the ' +
         'room is quiet.',
         'warn',
         LOW_CONFIDENCE_TOAST_MS_INT
@@ -666,7 +666,7 @@ export class CalibrationPanel {
     canvas_ctx.textBaseline = 'middle';
     canvas_ctx.font = `${10 * chart_obj.pixel_ratio_float}px system-ui`;
     canvas_ctx.fillText(
-      'No measurement yet — or drop a saved curve here',
+      'No measurement yet - or drop a saved curve here',
       chart_obj.width_px_int / 2,
       chart_obj.height_px_int / 2
     );

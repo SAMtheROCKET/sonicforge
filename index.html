@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SonicForge — Precision Tone Generator, Noise Lab & 3D Spectrum Analyser</title>
+<title>SonicForge - Precision Tone Generator, Noise Lab & 3D Spectrum Analyser</title>
 
-<meta name="description" content="A 16-channel precision tone generator, seven-colour noise lab, speaker water-eject tool, microphone room calibration and real-time 3D spectrogram. Runs entirely in your browser — nothing is uploaded, nothing is installed.">
+<meta name="description" content="A 16-channel precision tone generator, seven-colour noise lab, speaker water-eject tool, microphone room calibration and real-time 3D spectrogram. Runs entirely in your browser - nothing is uploaded, nothing is installed.">
 <meta name="theme-color" content="#0B0F19">
 <meta name="color-scheme" content="dark">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="SonicForge — Forge any frequency">
-<meta property="og:description" content="16 parallel tone channels, Voss–McCartney pink noise, automatic speaker calibration, a scriptable terminal and a WebGL 3D spectrogram. 100% client-side, zero install.">
+<meta property="og:title" content="SonicForge - Forge any frequency">
+<meta property="og:description" content="16 parallel tone channels, Voss-McCartney pink noise, automatic speaker calibration, a scriptable terminal and a WebGL 3D spectrogram. 100% client-side, zero install.">
 <meta property="og:url" content="https://samtherocket.github.io/sonicforge/">
 <meta property="og:image" content="https://samtherocket.github.io/sonicforge/assets/og.png">
 <meta property="og:image:width" content="1200">
@@ -43,7 +43,7 @@
 <meta name="robots"
       content="index, follow, max-image-preview:large, max-snippet:-1">
 
-<meta name="twitter:title" content="SonicForge — Forge any frequency">
+<meta name="twitter:title" content="SonicForge - Forge any frequency">
 <meta name="twitter:description"
       content="16 tone channels with real phase control, seven noise
                colours, mic room calibration and a WebGL 3D spectrogram.
@@ -84,7 +84,7 @@
       "description": "A browser-based precision audio instrument: 16 tone channels with real phase control, seven noise colours, microphone room calibration, a scripting terminal and a WebGL 3D spectrogram. Runs entirely client-side with nothing uploaded, and works offline.",
       "featureList": [
         "16 independent tone channels, each with waveform, dBFS level, stereo pan, starting phase, detune and glide",
-        "True phase control — two channels 180 degrees apart cancel to exact silence",
+        "True phase control - two channels 180 degrees apart cancel to exact silence",
         "Seven noise colours: white, pink, brown, blue, violet, grey and green",
         "Microphone room calibration with a 10-band correction curve",
         "Real-time WebGL 3D spectrogram and analytic interference field",
@@ -140,7 +140,7 @@
           "name": "What frequency range can it generate?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "From 0.05 Hz to just below Nyquist — 24 kHz at the default 48 kHz sample rate, or 48 kHz if you switch the audio context to 96 kHz. That covers infrasonic, audible and ultrasonic bands."
+            "text": "From 0.05 Hz to just below Nyquist - 24 kHz at the default 48 kHz sample rate, or 48 kHz if you switch the audio context to 96 kHz. That covers infrasonic, audible and ultrasonic bands."
           }
         },
         {
@@ -156,7 +156,7 @@
           "name": "How does the speaker water eject work?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "It plays a 165 Hz pulse train at high excursion, which moves the driver far enough to physically push trapped water out of the grille. Point the speaker downward and take headphones off first — at that level in-ear playback is genuinely unsafe."
+            "text": "It plays a 165 Hz pulse train at high excursion, which moves the driver far enough to physically push trapped water out of the grille. Point the speaker downward and take headphones off first - at that level in-ear playback is genuinely unsafe."
           }
         },
         {
@@ -176,7 +176,7 @@
 <body>
 
 <!-- ====================================================================
-     Gesture unlock — every browser requires a user gesture before audio
+     Gesture unlock - every browser requires a user gesture before audio
      ==================================================================== -->
 <div
      class="unlock"
@@ -205,7 +205,7 @@
     <h1 class="unlock__title" id="unlock-title">Sonic<b>Forge</b></h1>
     <p class="unlock__sub">
       Click anywhere to start the audio engine.<br>
-      Everything runs locally — no account, no upload, no install.
+      Everything runs locally - no account, no upload, no install.
     </p>
     <p class="unlock__sub" style="margin-top:18px;opacity:.6">
       <span class="kbd">Space</span> play/stop &nbsp;
@@ -285,7 +285,7 @@
       <button
         class="btn btn--sm btn--danger"
         id="panic"
-        title="Panic — silence everything (Esc)">Panic</button>
+        title="Panic - silence everything (Esc)">Panic</button>
     </div>
 
     <div class="topbar__group">
@@ -341,7 +341,7 @@
     <div class="topbar__group">
       <span
         class="label"
-        title="Sample rate sets the Nyquist ceiling — nothing above half the
+        title="Sample rate sets the Nyquist ceiling - nothing above half the
         rate can exist">Rate</span>
       <select
         class="input input--sm"
@@ -357,7 +357,7 @@
     <div class="topbar__group">
       <label
            class="switch"
-           title="Safety limiter — prevents 16 stacked channels from clipping"
+           title="Safety limiter - prevents 16 stacked channels from clipping"
            >
         <input type="checkbox" id="limiter" checked>
         <span class="switch__track"></span>
@@ -667,7 +667,7 @@
             <div class="field grow" style="min-width:150px">
               <span
                 class="label"
-                title="Boosts masking energy across the 300–3400 Hz speech
+                title="Boosts masking energy across the 300-3400 Hz speech
                 band">Vocal shield</span>
               <div class="row">
                 <input
@@ -759,7 +759,7 @@
             role="log"
             aria-live="polite"></div>
           <div class="term__tracker" data-term="tracker" hidden>
-            <span class="term__pc" data-term="pc">—</span>
+            <span class="term__pc" data-term="pc">-</span>
             <span class="term__bar"><i data-term="bar"></i></span>
             <span class="term__count" data-term="count"></span>
           </div>
@@ -817,19 +817,19 @@
 
           <div id="cal-stats" hidden>
             <div class="kv"><span class="kv__k">Round
-            trip</span><span class="kv__v" id="cal-latency">—</span></div>
+            trip</span><span class="kv__v" id="cal-latency">-</span></div>
             <div class="kv"><span class="kv__k">Noise
-            floor</span><span class="kv__v" id="cal-floor">—</span></div>
+            floor</span><span class="kv__v" id="cal-floor">-</span></div>
             <div class="kv">
               <span class="kv__k">Confidence</span>
-              <span class="kv__v" id="cal-confidence">—</span></div>
+              <span class="kv__v" id="cal-confidence">-</span></div>
           </div>
 
           <p class="note-card" id="cal-note">
             Plays a 3&nbsp;s sweep through your speakers and listens back with
             the microphone,
             then builds a 10-band correction curve.
-            <b class="text-cyan">The audio never leaves this device</b> — the
+            <b class="text-cyan">The audio never leaves this device</b> - the
             stream is released the
             moment the measurement ends, and nothing is recorded.
           </p>
@@ -892,7 +892,7 @@
           </div>
 
           <div id="concert-live" hidden>
-            <div class="roomcode" id="concert-room">——————</div>
+            <div class="roomcode" id="concert-room">------</div>
             <div class="row" style="gap:10px;align-items:flex-start">
               <canvas
                 class="qr"
@@ -908,9 +908,9 @@
                   <span class="kv__v" id="concert-peers">0</span></div>
                 <div class="kv"><span class="kv__k">Clock
                 offset</span>
-                  <span class="kv__v" id="concert-offset">—</span></div>
+                  <span class="kv__v" id="concert-offset">-</span></div>
                 <div class="kv"><span class="kv__k">Round
-                trip</span><span class="kv__v" id="concert-rtt">—</span></div>
+                trip</span><span class="kv__v" id="concert-rtt">-</span></div>
                 <button class="btn btn--xs btn--block" id="concert-copy">Copy
                 join link</button>
               </div>
@@ -990,11 +990,11 @@
       <!-- No break between these two: they sit in an inline row with
            no separating space, so a newline would render as one. -->
       <span class="status-dot" id="dot-engine"></span><b id="st-engine">booting</b></span>
-    <span>SR <b id="st-rate">—</b></span>
-    <span>LAT <b id="st-latency">—</b></span>
+    <span>SR <b id="st-rate">-</b></span>
+    <span>LAT <b id="st-latency">-</b></span>
     <span>VOICES <b id="st-voices">0</b></span>
     <span>GR <b id="st-gr">0.0 dB</b></span>
-    <span>FPS <b id="st-fps">—</b></span>
+    <span>FPS <b id="st-fps">-</b></span>
     <span class="statusbar__spacer"></span>
     <span id="st-hint">Press <b>/</b> for the terminal</span>
   </footer>

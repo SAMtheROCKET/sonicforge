@@ -31,10 +31,10 @@ const HELP_BODY_HTML_STR = `
     <tr><td style="padding:3px 0"><span class="kbd">Space</span></td>
       <td>Play / stop everything</td></tr>
     <tr><td style="padding:3px 0"><span class="kbd">Esc</span></td>
-      <td>Panic — immediate silence</td></tr>
+      <td>Panic - immediate silence</td></tr>
     <tr><td style="padding:3px 0"><span class="kbd">/</span></td>
       <td>Focus the script terminal</td></tr>
-    <tr><td style="padding:3px 0"><span class="kbd">1</span>–<span
+    <tr><td style="padding:3px 0"><span class="kbd">1</span>-<span
       class="kbd">9</span></td><td>Toggle that channel</td></tr>
     <tr><td style="padding:3px 0"><span class="kbd">↑</span><span
       class="kbd">↓</span></td><td>Select previous / next channel</td></tr>

@@ -506,7 +506,7 @@ function runAddToneChecks(app) {
       localStorage.removeItem('sonicforge.__probe');
       return is_ok_bool;
     } catch {
-      return 'unavailable (private mode) — app degrades gracefully';
+      return 'unavailable (private mode) - app degrades gracefully';
     }
   }, { critical: false });
 

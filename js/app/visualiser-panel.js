@@ -75,7 +75,7 @@ export function buildVisualiserPanel(app_obj) {
 
   if (app_obj.ui.waterfall.render_mode_str !== 'webgl') {
     app_obj.log(
-      'WebGL2 is unavailable — the visualiser is running its Canvas2D ' +
+      'WebGL2 is unavailable - the visualiser is running its Canvas2D ' +
       'fallback.',
       'warn'
     );

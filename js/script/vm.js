@@ -409,7 +409,7 @@ export class ScriptVM extends Emitter {
       if (++this.#step_count_int > MAX_TOTAL_STEPS_INT) {
         throw new ScriptError(
           'Execution budget exhausted after ' +
-          `${MAX_TOTAL_STEPS_INT.toLocaleString()} steps — ` +
+          `${MAX_TOTAL_STEPS_INT.toLocaleString()} steps - ` +
           'is a loop count too large?'
         );
       }

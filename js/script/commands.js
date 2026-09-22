@@ -229,7 +229,7 @@ export const COMMANDS = {
 
   loop: {
     signature: 'loop(count, [commands])',
-    help: 'Repeat a block. Handled by the VM — nesting is supported.',
+    help: 'Repeat a block. Handled by the VM - nesting is supported.',
     example: 'loop(4, [ play(880, 100), wait(150) ])',
     // Never reached: the compiler rewrites loops into LOOP/ENDLOOP.
     run() {
@@ -240,7 +240,7 @@ export const COMMANDS = {
   burst: {
     signature: 'burst(frequency, count, on_ms, off_ms, gain_db)',
     help:
-      'Pulse train at one frequency — the primitive behind water ejection.',
+      'Pulse train at one frequency - the primitive behind water ejection.',
     example: 'burst(165hz, 20, 120ms, 60ms, -6db)',
     run(runtime_obj, arguments_list) {
       const frequency_hertz_float =
@@ -280,7 +280,7 @@ export const COMMANDS = {
     signature: 'am(carrier_hz, modulation_hz, duration_ms, depth, gain_db)',
     help:
       'Amplitude-modulated tone. The envelope rate can be infrasonic even ' +
-      'though the carrier is not — this is the only way ordinary speakers ' +
+      'though the carrier is not - this is the only way ordinary speakers ' +
       'deliver a sub-20 Hz forcing, because they physically cannot ' +
       'reproduce a sub-20 Hz tone.',
     example: 'am(200hz, 11hz, 30s, 100%, -8db)',
@@ -572,7 +572,7 @@ export const COMMANDS = {
   phase: {
     signature: 'phase(channel, degrees)',
     help:
-      'Rotate a channel’s starting phase, 0–360°. Use two channels at 0° ' +
+      'Rotate a channel’s starting phase, 0-360°. Use two channels at 0° ' +
       'and 180° to demonstrate cancellation.',
     example: 'phase(2, 180deg)',
     run(runtime_obj, arguments_list) {

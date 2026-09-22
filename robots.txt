@@ -1,4 +1,4 @@
-# SonicForge — https://samtherocket.github.io/sonicforge/
+# SonicForge - https://samtherocket.github.io/sonicforge/
 #
 # Everything here is public, static and free. Crawl all of it.
 #

@@ -14,7 +14,7 @@ export const PRESETS_LIST = [
     id: 'resonance-sweep',
     group: 'lab',
     name: 'Resonance Detection',
-    desc: 'Slow 20–300 Hz sweep for structural modes',
+    desc: 'Slow 20-300 Hz sweep for structural modes',
     icon: 'ruler',
     tone: 'cyan',
     script: `
@@ -70,7 +70,7 @@ export const PRESETS_LIST = [
     id: 'phase-null',
     group: 'lab',
     name: 'Phase Cancellation Demo',
-    desc: 'Two 300 Hz tones at 0° and 180° — watch them annihilate',
+    desc: 'Two 300 Hz tones at 0° and 180° - watch them annihilate',
     icon: 'eye',
     tone: 'cyan',
     async apply(app) {
@@ -104,7 +104,7 @@ export const PRESETS_LIST = [
     id: 'beat-frequency',
     group: 'lab',
     name: 'Beat Frequency Lab',
-    desc: '440 Hz against 444 Hz — a 4 Hz beat',
+    desc: '440 Hz against 444 Hz - a 4 Hz beat',
     icon: 'activity',
     tone: 'cyan',
     async apply(app) {

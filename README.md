@@ -5,7 +5,7 @@
 <br>
 
 **A 16-channel precision tone generator, seven-colour noise lab, microphone room
-calibration and a real-time 3D spectrogram — running entirely in your browser.**
+calibration and a real-time 3D spectrogram - running entirely in your browser.**
 
 **[▶ Open SonicForge](https://samtherocket.github.io/sonicforge/)**
 
@@ -28,13 +28,13 @@ Built by **[Sambit Supriya Dash](https://github.com/SAMtheROCKET)**
 This came out of a combustion-acoustics experiment.
 
 We had designed the study, built the apparatus, and stood it up physically. The
-acoustic sources were speakers, and the whole point was to vary parameters —
-frequency, amplitude, waveform, phase, spectral content — and observe what each
+acoustic sources were speakers, and the whole point was to vary parameters -
+frequency, amplitude, waveform, phase, spectral content - and observe what each
 one did to a flame front. For that to mean anything, the excitation had to be
 *controlled*: known, repeatable, and comparable between runs.
 
 The tooling was the problem. Every generator we tried had its own conventions.
-One would call a level a percentage, another an arbitrary 0–100, another
+One would call a level a percentage, another an arbitrary 0-100, another
 something it never named. Amplitude behaved differently between them. None
 offered phase at all. Switching tools mid-study meant the runs were no longer
 comparable, and switching *back* meant re-deriving what a setting had actually
@@ -54,7 +54,7 @@ question is being asked.
 
 > **On physiological effects.** Part of what motivated this work is the broader
 > question of how specific frequencies affect the body. SonicForge is a precise
-> instrument for *conducting* that kind of investigation — it will reproduce a
+> instrument for *conducting* that kind of investigation - it will reproduce a
 > stimulus exactly and show you what it is doing. It makes no claim that any
 > frequency produces any particular hormonal or neurochemical effect. That is a
 > question to be tested, and this is a tool for testing it.
@@ -71,7 +71,7 @@ Each with its own waveform, dBFS level, stereo position, **phase**,
 detune and glide. Run all sixteen at once.
 
 ### Real phase control
-`OscillatorNode` has no phase parameter — you genuinely cannot start two
+`OscillatorNode` has no phase parameter - you genuinely cannot start two
 oscillators at a chosen offset. SonicForge builds each wave from its Fourier
 coefficients and rotates every harmonic, so phase is baked into the wave table.
 Two channels 180° apart cancel to **exact silence**, and the test suite asserts
@@ -80,14 +80,14 @@ plays: phase is measured against the audio clock, and a retuned channel
 relocks to it about an eighth of a second after the last change.
 
 ### Seven noise colours
-White, pink (Voss–McCartney), brown (Brownian integration), blue, violet, grey
+White, pink (Voss-McCartney), brown (Brownian integration), blue, violet, grey
 (inverse equal-loudness) and green. Any two cross-blend on an equal-power curve.
 
 </td><td width="50%" valign="top">
 
 ### Room auto-calibration
 Plays a 3-second sweep, listens with your microphone, and builds a 10-band
-correction curve. It measures the round-trip latency **first** — without that,
+correction curve. It measures the round-trip latency **first** - without that,
 the measurement lands on the wrong frequencies entirely.
 
 ### Scriptable
@@ -107,7 +107,7 @@ offset, for real spatial-cancellation experiments.
 </td></tr>
 </table>
 
-Frequency range is **0.05 Hz to just under Nyquist** — 24 kHz at the default
+Frequency range is **0.05 Hz to just under Nyquist** - 24 kHz at the default
 sample rate, **48 kHz** if you switch the context to 96 kHz.
 
 ---
@@ -130,7 +130,7 @@ pink noise running underneath. It is raw WebGL2, and you can drag to orbit it.
 
 Above: 60 Hz against 64 Hz. The **cyan** trace is the left channel sum, the
 **violet** trace the right, and the red dots mark where the superposition
-collapses. The readout names the beat — `4.00 Hz` — because it derives it from
+collapses. The readout names the beat - `4.00 Hz` - because it derives it from
 the channel parameters rather than guessing from an analyser. The carriers are
 low here only so that individual cycles stay legible at this size; 440 Hz
 against 444 Hz gives the same 4 Hz beat.
@@ -185,12 +185,12 @@ and additionally runs the optional WebSocket relay for Concert Mode's LAN tier.
 
 The whole application is static.
 
-**GitHub Pages** — push to `main`. `.github/workflows/pages.yml` verifies
+**GitHub Pages** - push to `main`. `.github/workflows/pages.yml` verifies
 the build and then deploys it, so a push that breaks the module graph, the
 precache manifest or the style guide never reaches the live site. The
 verification is:
 
-1. no absolute asset paths — they break hosting under a `/repo-name/` subpath
+1. no absolute asset paths - they break hosting under a `/repo-name/` subpath
 2. every file the HTML references exists
 3. every module import resolves and every DOM id exists
 4. the service-worker precache manifest is current
@@ -200,7 +200,7 @@ All five are blocking. Run the same checks locally with
 `python tools/check_wiring.py`, `python tools/build_precache.py --check` and
 `python tools/lint_style.py`.
 
-**Vercel** — import the repository at [vercel.com/new](https://vercel.com/new)
+**Vercel** - import the repository at [vercel.com/new](https://vercel.com/new)
 with no build command and the repository root as the output, and every push
 to `main` redeploys it; or run `npx vercel deploy --prod`. `vercel.json` sets
 the correct `text/javascript` MIME type for ES modules, a `no-cache` policy on
@@ -229,7 +229,7 @@ There is no backend. There is nothing to have a backend *for*.
 
 - **Nothing is uploaded, ever.** No analytics, no telemetry, no CDN.
 - **The microphone** opens only while a calibration measurement runs, and is
-  released in a `finally` block — so it is let go even if the measurement fails
+  released in a `finally` block - so it is let go even if the measurement fails
   or you cancel it. No audio is recorded or stored; only a 96-point magnitude
   curve leaves the analyser, and it stays in your browser.
 - **Your session** is kept in `localStorage` on your own device.
@@ -252,15 +252,15 @@ forcing** that a flame responds to, while the speaker only ever has to reproduce
 
 | Effect | Band | Notes |
 |---|---|---|
-| Candle flicker lock-in | **9–15 Hz** | A candle's buoyancy-driven flicker is already ~10–13 Hz. Drive near it and the flicker phase-locks. Use `am()`. |
-| Flame extinction by sound | **30–60 Hz** | Needs a subwoofer and real SPL. |
-| Rubens tube standing waves | **50–250 Hz** | λ = c/f. At 150 Hz, λ ≈ 2.3 m. |
-| Premixed front wrinkling | **100–600 Hz** | Best visible band for a butane burner. |
-| Rijke / thermoacoustic | **f = c/2L or c/4L** | ~170–340 Hz for a 0.5–1 m tube. |
+| Candle flicker lock-in | **9-15 Hz** | A candle's buoyancy-driven flicker is already ~10-13 Hz. Drive near it and the flicker phase-locks. Use `am()`. |
+| Flame extinction by sound | **30-60 Hz** | Needs a subwoofer and real SPL. |
+| Rubens tube standing waves | **50-250 Hz** | λ = c/f. At 150 Hz, λ ≈ 2.3 m. |
+| Premixed front wrinkling | **100-600 Hz** | Best visible band for a butane burner. |
+| Rijke / thermoacoustic | **f = c/2L or c/4L** | ~170-340 Hz for a 0.5-1 m tube. |
 | Ultrasound | **>20 kHz** | Needs a 96 kHz context *and* a piezo tweeter. |
 
 > **Flames respond to acoustic velocity, not pressure.** Put the flame at a
-> velocity antinode, which is a *pressure node* — in a Rubens tube that is where
+> velocity antinode, which is a *pressure node* - in a Rubens tube that is where
 > the flames are **shortest**, not tallest. Getting this backwards is the most
 > common reason people report "no effect".
 
@@ -271,13 +271,13 @@ forcing** that a flame responds to, while the speaker only ever has to reproduce
 - **Take headphones off** before any speaker routine. The water-eject and
   extinction presets are genuinely unsafe in-ear.
 - Never leave an open flame unattended. A Rubens tube is a pipe full of
-  flammable gas — build and operate one only if you already know how.
+  flammable gas - build and operate one only if you already know how.
 
 ---
 
 ## Architecture
 
-Vanilla ES2022 modules. No framework, no bundler, no runtime dependency — the
+Vanilla ES2022 modules. No framework, no bundler, no runtime dependency - the
 app makes **zero network requests** once loaded, which is what makes the offline
 guarantee real rather than aspirational.
 
@@ -330,7 +330,7 @@ tools/
 
 ### Three decisions worth knowing about
 
-**No Three.js.** The 3D spectrogram is raw WebGL2 — one shader program, one
+**No Three.js.** The 3D spectrogram is raw WebGL2 - one shader program, one
 indexed mesh, one streaming texture. Pulling a scene graph from a CDN to get
 that would have cost the offline guarantee.
 
@@ -375,7 +375,7 @@ Web Audio evaluating a `PeriodicWave` as `Σ real·cos + imag·sin`, and a silen
 inverted sign convention would be very hard to notice by ear. So it is asserted
 against the browser's own oscillator.
 
-There is also an application self-test — 70 checks that boot the real app,
+There is also an application self-test - 70 checks that boot the real app,
 exercise every module, and audit the rendered output for `NaN`, clipped panels
 and stale readouts:
 
@@ -392,8 +392,8 @@ is how they run in CI.
 
 | | | | |
 |---|---|---|---|
-| `Space` | Play / stop everything | `1`–`9` | Toggle that channel |
-| `Esc` | Panic — immediate silence | `↑` `↓` | Previous / next channel |
+| `Space` | Play / stop everything | `1`-`9` | Toggle that channel |
+| `Esc` | Panic - immediate silence | `↑` `↓` | Previous / next channel |
 | `/` | Focus the script terminal | `M` `S` | Mute / solo selected |
 | `V` | Cycle the visualiser | `N` | Toggle noise |
 
@@ -457,5 +457,5 @@ first; the routine drives the speaker hard on purpose.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). Built by Sambit Supriya Dash
+MIT - see [LICENSE](LICENSE). Built by Sambit Supriya Dash
 ([@SAMtheROCKET](https://github.com/SAMtheROCKET)).
