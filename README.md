@@ -15,7 +15,7 @@ calibration and a real-time 3D spectrogram — running entirely in your browser.
 
 <img src="assets/demo.gif" alt="The SonicForge interface" width="900">
 
-**[▶ Watch the 34-second demo, with sound](https://samtherocket.github.io/sonicforge/assets/demo.mp4)**
+**[▶ Watch the 45-second demo, with sound](https://samtherocket.github.io/sonicforge/assets/demo.mp4)**
 
 </div>
 

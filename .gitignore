@@ -21,5 +21,7 @@ __pycache__/
 TODO.md
 LAUNCH.md
 
-# Raw screen recording (40 MB). The published cut is assets/demo.mp4.
+# Raw screen recordings (40 MB and 61 MB). The published cut, built
+# from both, is assets/demo.mp4.
 assets/sonicforge_demo.mp4
+assets/destructive_wave_100_percentage.mp4
