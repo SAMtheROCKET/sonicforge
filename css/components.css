@@ -160,6 +160,8 @@
 /* Segmented control */
 .seg {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   padding: 2px;
   gap: 2px;
   border-radius: var(--r);
@@ -509,10 +511,35 @@ select.input option {
    Frequency dial
    ========================================================================= */
 
+/*
+ * The controls beside the dial need about 300 px. When the panel is
+ * narrower than the dial plus that - a phone, or a tablet with both rails
+ * showing - they wrap beneath it rather than squeezing, and the dial
+ * centres on its own row.
+ */
 .dial-wrap {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 16px;
   align-items: center;
+}
+
+.dial-wrap > .grow {
+  flex: 1 1 300px;
+}
+
+/*
+ * Level, pan and phase. Each keeps at least 140 px, so a narrow panel
+ * stacks them instead of shrinking the sliders to nothing.
+ */
+.trim-row {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.trim-row > .field {
+  flex: 1 1 140px;
 }
 
 .dial {

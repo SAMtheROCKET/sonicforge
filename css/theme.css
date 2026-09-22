@@ -202,11 +202,18 @@ canvas {
    Application shell
    ========================================================================= */
 
+/*
+ * One column that may never grow past the viewport. Without the explicit
+ * minmax(0, 1fr), the grid sizes its implicit column to the widest child's
+ * min-content, so a header that could not shrink widened the whole page.
+ * The header row is auto so the top bar can wrap onto a second line.
+ */
 #app {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: var(--header-h) 1fr var(--status-h);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr var(--status-h);
   height: 100vh;
   height: 100dvh;
 }
@@ -234,11 +241,18 @@ canvas {
    Header
    ========================================================================= */
 
+/*
+ * A single row where it fits, wrapping onto more rows where it does not.
+ * The block padding keeps the one-row bar at exactly --header-h: 34 px of
+ * controls, 11.5 px above and below, and the 1 px border.
+ */
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 18px;
-  padding: 0 16px;
+  gap: 8px 18px;
+  min-height: var(--header-h);
+  padding: 11.5px 16px;
   border-bottom: 1px solid var(--glass-brd);
   background: linear-gradient(
     180deg,
@@ -563,6 +577,36 @@ canvas {
    Responsive
    ========================================================================= */
 
+/*
+ * Laptops, 1241-1599 px: keep the top bar on one row by tightening it and
+ * dropping two readouts that repeat what is shown elsewhere. The Nyquist
+ * limit follows from the rate selector beside it, and the A4 deviation from
+ * the pitch standard chosen next to it. Both return once the bar wraps.
+ */
+@media (max-width: 1599px) {
+  .brand__tag,
+  #a4-cents,
+  #nyquist-badge {
+    display: none;
+  }
+  .topbar {
+    column-gap: 10px;
+  }
+  .topbar__group {
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 1400px) {
+  .topbar {
+    column-gap: 6px;
+  }
+  .topbar__group {
+    gap: 8px;
+    padding: 0 6px;
+  }
+}
+
 @media (max-width: 1500px) {
   :root {
     --rail-r: 340px;
@@ -595,6 +639,22 @@ canvas {
   .rail-toggle {
     display: inline-flex !important;
   }
+
+  /* From here down the bar wraps, so separators would start new rows. */
+  #a4-cents,
+  #nyquist-badge {
+    display: inline-flex;
+  }
+  .topbar {
+    padding: 8px 12px;
+  }
+  .topbar__group {
+    border-left: none;
+    padding: 0;
+  }
+  .topbar__spacer {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {
@@ -604,7 +664,7 @@ canvas {
   #app {
     height: auto;
     min-height: 100dvh;
-    grid-template-rows: var(--header-h) 1fr var(--status-h);
+    grid-template-rows: auto 1fr var(--status-h);
   }
   .shell {
     grid-template-columns: minmax(0, 1fr);
@@ -617,11 +677,25 @@ canvas {
     overflow: visible;
   }
   .topbar {
-    gap: 10px;
-    overflow-x: auto;
+    gap: 8px 12px;
   }
+}
+
+/*
+ * Small phones. The master group alone - label, slider, readout and meter -
+ * is wider than a 360 px screen, so a group may wrap onto a second line of
+ * its own instead of pushing the page wider.
+ */
+@media (max-width: 600px) {
   .topbar__group {
-    padding: 0 8px;
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: 6px;
+  }
+  /* A panel's title, badge and buttons may take two lines, likewise. */
+  .panel__head {
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 }
 

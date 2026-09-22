@@ -184,7 +184,10 @@ export function bindShortcuts(app_obj) {
  *
  * Brief:
  *   Choosing a preset also closes the rail, because on a phone it
- *   covers the thing the preset just changed.
+ *   covers the thing the preset just changed. The rail opens just below
+ *   the header's actual bottom edge, measured each time, because the
+ *   header wraps onto extra rows on narrow screens and a fixed offset
+ *   would slide the rail underneath it.
  *
  * Arguments:
  *   (none)
@@ -195,10 +198,13 @@ export function bindShortcuts(app_obj) {
 export function bindRailToggle() {
   const toggle_el = findElement('rail-toggle');
   const rail_el = findElement('rail-left');
+  const header_el = document.querySelector('.topbar');
 
-  toggle_el.addEventListener(
-    'click', () => rail_el.classList.toggle('is-open')
-  );
+  toggle_el.addEventListener('click', () => {
+    const header_bottom_px_float = header_el.getBoundingClientRect().bottom;
+    rail_el.style.top = `${Math.max(0, header_bottom_px_float)}px`;
+    rail_el.classList.toggle('is-open');
+  });
   rail_el.addEventListener('click', (click_event) => {
     if (click_event.target.closest('.preset')) {
       rail_el.classList.remove('is-open');

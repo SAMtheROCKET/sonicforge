@@ -198,9 +198,15 @@ All five are blocking. Run the same checks locally with
 `python tools/check_wiring.py`, `python tools/build_precache.py --check` and
 `python tools/lint_style.py`.
 
-**Vercel** — `npx vercel deploy --prod`. `vercel.json` sets the correct
-`text/javascript` MIME type for ES modules, a `no-cache` policy on `sw.js`, and
-a `Permissions-Policy` allowing the microphone and denying everything else.
+**Vercel** — import the repository at [vercel.com/new](https://vercel.com/new)
+with no build command and the repository root as the output, and every push
+to `main` redeploys it; or run `npx vercel deploy --prod`. `vercel.json` sets
+the correct `text/javascript` MIME type for ES modules, a `no-cache` policy on
+`sw.js`, and a `Permissions-Policy` allowing the microphone and denying
+everything else. It also keeps `cleanUrls` off, deliberately: that setting
+redirects `/index.html` to `/`, the service worker would then cache a
+redirected response as its offline fallback, and browsers refuse to use one
+for a page load.
 
 Every asset path is relative, so it works at `/repo-name/` or a domain root
 without changes. After changing any shipped file:
@@ -209,7 +215,7 @@ without changes. After changing any shipped file:
 python tools/build_precache.py
 ```
 
-The service worker precaches all 54 shipped files (~632 KB) so the app runs with
+The service worker precaches all 83 shipped files (~917 KB) so the app runs with
 no connection. It is deliberately **not** registered on `localhost`, or a
 cache-first worker would serve your previous edit back on every reload.
 
@@ -431,6 +437,19 @@ views render empty. They need a real browser and a screen recorder. The
 interference field is computed analytically from each channel's own
 parameters, which is why it is the one view that is correct without a
 sound card.
+
+### Wanted: a water-eject clip
+
+The **Speaker Water Eject** routine (*Hardware Recovery* in the presets) has
+never been filmed. If you record it clearing water from a real phone speaker,
+open an issue or a pull request with the clip, and it will be featured here,
+credited to you, with a link of your choice.
+
+What makes it work on camera: the phone speaker-down on a dark cloth, a few
+drops on the grille, a lamp to the side rather than in front, focus locked on
+the grille, and about ten seconds from the tap to a clear grille. Keep the
+recorded sound, because the tone is the demo. Read the [safety notes](#safety)
+first; the routine drives the speaker hard on purpose.
 
 ---
 
