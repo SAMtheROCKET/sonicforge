@@ -159,13 +159,13 @@ export function buildOscillatorPanel(app_obj) {
      * Re-read every control from the selected channel.
      *
      * Arguments:
-     *   (none)
+     *   options_obj (Object): Passed through to syncPanel.
      *
      * Returns:
      *   (none)
      */
-    sync() {
-      syncPanel(app_obj);
+    sync(options_obj = {}) {
+      syncPanel(app_obj, options_obj);
     },
   };
 
@@ -455,18 +455,25 @@ function syncChannelTrim(channel_obj) {
  *
  * Arguments:
  *   app_obj (Object): The application facade.
+ *   options_obj (Object): { is_typing_kept_bool } leaves the frequency
+ *     field alone while it has focus. Pass it when the change came from
+ *     elsewhere, so it cannot discard what is being typed. The panel's
+ *     own syncs omit it, since Escape relies on them to restore the field.
  *
  * Returns:
  *   (none)
  */
-function syncPanel(app_obj) {
+function syncPanel(app_obj, options_obj = {}) {
+  const { is_typing_kept_bool = false } = options_obj;
   const channel_obj = app_obj.selectedChannel;
   if (!channel_obj) {
     return;
   }
 
-  findElement('freq-input').value =
-    formatFrequencyField(channel_obj.frequency_hertz_float);
+  const field_el = findElement('freq-input');
+  if (!is_typing_kept_bool || document.activeElement !== field_el) {
+    field_el.value = formatFrequencyField(channel_obj.frequency_hertz_float);
+  }
   syncDialReadout(app_obj, channel_obj);
 
   for (const button_el of
