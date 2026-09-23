@@ -17,7 +17,7 @@ Built by **[Sambit Supriya Dash](https://github.com/SAMtheROCKET)**
 
 <img src="assets/demo.gif" alt="The SonicForge interface" width="900">
 
-**[▶ Watch the 45-second demo, with sound](https://samtherocket.github.io/sonicforge/assets/demo.mp4)**
+**[▶ Watch the 45-second demo](https://youtu.be/4ZWg-hkk_uo)**
 
 </div>
 
